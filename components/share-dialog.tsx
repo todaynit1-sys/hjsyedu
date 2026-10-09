@@ -7,7 +7,7 @@ export function ShareDialog({ code, onClose }: { code: string; onClose: () => vo
     const url = `${window.location.origin}/room/${code}`;
     setUrl(url); const dialog = dialogRef.current; const previous = document.activeElement as HTMLElement;
     dialog?.showModal(); let stopped = false;
-    import('qrcode').then(module => module.toDataURL(url, { width: 280, margin: 2, color: { dark: '#604193', light: '#ffffff' }, errorCorrectionLevel: 'M' })).then(data => { if (!stopped) setQr(data); }).catch(() => setError('QR코드를 불러오지 못했어요. 아래 링크를 공유해주세요.'));
+    import('qrcode').then(module => module.toDataURL(url, { width: 280, margin: 2, color: { dark: '#1e293b', light: '#ffffff' }, errorCorrectionLevel: 'M' })).then(data => { if (!stopped) setQr(data); }).catch(() => setError('QR코드를 불러오지 못했어요. 아래 링크를 공유해주세요.'));
     return () => { stopped = true; dialog?.close(); previous?.focus(); };
   }, [code]);
   async function copy() { try { await navigator.clipboard.writeText(url); setCopied(true); } catch { setError('링크를 길게 누르거나 선택해서 복사해주세요.'); } }

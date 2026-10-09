@@ -1,6 +1,14 @@
 # HJ & SY branding
 
-Brand: HJSY AI edu / 현준선영의 AI 교실.
+Brand: HJSY AI edu / 현준선영 AI 교육.
+
+Current presentation: corporate education. White, charcoal and muted indigo; restrained typography and small radii. The UI uses the HJ/SY letter monogram instead of mascot artwork. Existing animal assets are retained as optional brand resources.
+
+Current assets: `public/branding/hjsy-mark-corporate.svg`, `public/branding/hjsy-logo-corporate.svg`, `public/branding/hjsy-thumbnail-corporate.png` (1672 × 941). The thumbnail is used on the entry page and for sharing.
+
+Corporate thumbnail route: built-in image_gen. Final prompt:
+
+Create a finished restrained corporate education brand thumbnail. Landscape 16:9. Exact typography: "HJSY" in large bold modern dark navy sans-serif, below it "AI edu" in sophisticated muted indigo. A small precise subtitle "LIVE CLASSROOM". Layout is a clean typographic Swiss editorial brand cover: left aligned text with generous white space, small HJ and SY letter monogram in a thin outlined square at the upper left, subtle architectural fine gray grid lines and two understated overlapping translucent indigo geometric panels on the right suggesting knowledge and collaboration. Pure warm white background, dark charcoal navy, cool gray and one muted indigo accent. Extremely professional, confident, calm enterprise training aesthetic. Crisp flat graphics and typography, high legibility, carefully aligned margins, very little decoration. No cartoon characters, no animals, no smiling faces, no toys, no plush texture, no people, no stock photo, no neon, no dramatic gradients, no fake UI screenshots, no extra words, no watermark. Deliver one complete finished 16:9 thumbnail.
 
 HJ: lavender male bear with a mint bow tie. SY: peach female rabbit with a lavender ear ribbon. Website colors and avatars follow this pair. The character artwork is a transparent PNG; the favicon and compact vector mark are a simplified bear/rabbit pair. Previous drafts are excluded from Git.
 

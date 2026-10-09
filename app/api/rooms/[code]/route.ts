@@ -1,6 +1,7 @@
 import { AppError, ensureDay, mutate, snapshot, today } from '../../../../lib/domain';
 import { body, failure, guestId, isHost, joinGuest, json } from '../../../../lib/security';
-import { getRoom, mode, updateRoom } from '../../../../lib/store';
+import { ensureMainRoom, getRoom, mode, updateRoom } from '../../../../lib/store';
+import { MAIN_ROOM_CODE } from '../../../../lib/types';
 type Context = { params: Promise<{ code: string }> };
 function valid(code: string): string {
   if (!/^[A-Z0-9]{6}$/.test(code)) throw new AppError('6자리 참여 코드를 확인해주세요.');
@@ -21,11 +22,12 @@ export async function POST(request: Request, context: Context) {
     let guest = await guestId();
     let state;
     if (input.type === 'join') {
-      await getRoom(code);
+      if (code === MAIN_ROOM_CODE) await ensureMainRoom(); else await getRoom(code);
       guest = await joinGuest();
       state = await updateRoom(code, room => { ensureDay(room); mutate(room, { type: 'heartbeat' }, guest, false); });
     } else if (input.type === 'start-day') {
       if (!await isHost()) throw new AppError('강사 로그인이 필요합니다.', 401);
+      if (code === MAIN_ROOM_CODE) await ensureMainRoom();
       state = await updateRoom(code, room => { ensureDay(room); });
     } else {
       const host = await isHost();

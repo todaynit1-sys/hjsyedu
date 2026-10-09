@@ -2,7 +2,8 @@ import 'server-only';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { AppError, demoRoom } from './domain';
+import { AppError, demoRoom, newRoom } from './domain';
+import { MAIN_ROOM_CODE } from './types';
 import type { Room } from './types';
 type RecordRow = { code: string; state: Room; revision: number };
 let sqlite: DatabaseSync | undefined;
@@ -53,6 +54,18 @@ export async function insertRoom(room: Room): Promise<void> {
     try { db().prepare('INSERT INTO rooms(code,state,revision) VALUES (?,?,0)').run(room.code, JSON.stringify(room)); }
     catch { throw new AppError('강의실 생성에 실패했습니다. 다시 시도해주세요.', 409); }
   } else await cloud('', { method: 'POST', body: JSON.stringify({ code: room.code, state: room, revision: 0 }) });
+}
+export async function ensureMainRoom(): Promise<Room> {
+  try { return (await getRoom(MAIN_ROOM_CODE)).state; }
+  catch (error) { if (!(error instanceof AppError) || error.status !== 404) throw error; }
+  const room = newRoom('실시간 강의실');
+  room.code = MAIN_ROOM_CODE;
+  try { await insertRoom(room); return room; }
+  catch (error) {
+    // Concurrent first visits share the same room; never replace its messages or votes.
+    if (error instanceof AppError && error.status === 409) return (await getRoom(MAIN_ROOM_CODE)).state;
+    throw error;
+  }
 }
 export async function updateRoom(code: string, change: (room: Room) => void): Promise<Room> {
   for (let attempt = 0; attempt < 12; attempt++) {

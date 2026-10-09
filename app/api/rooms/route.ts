@@ -1,8 +1,9 @@
 import { newRoom, text } from '../../../lib/domain';
 import { body, failure, json, requireHost } from '../../../lib/security';
-import { insertRoom, listRooms } from '../../../lib/store';
+import { ensureMainRoom, insertRoom, listRooms } from '../../../lib/store';
+import { MAIN_ROOM_CODE } from '../../../lib/types';
 export async function GET() {
-  try { await requireHost(); return json((await listRooms()).map(r => ({ code: r.code, title: r.title, demo: r.demo }))); }
+  try { await requireHost(); await ensureMainRoom(); const rooms = await listRooms(); rooms.sort((a, b) => Number(b.code === MAIN_ROOM_CODE) - Number(a.code === MAIN_ROOM_CODE)); return json(rooms.map(r => ({ code: r.code, title: r.title, demo: r.demo }))); }
   catch (e) { return failure(e); }
 }
 export async function POST(request: Request) {
