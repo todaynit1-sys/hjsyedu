@@ -1,15 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ensureDay, mutate, newRoom, safeUrl, snapshot, today } from '../lib/domain.ts';
-test('Seoul midnight creates an independent daily record', () => {
+test('Seoul midnight deletes yesterday and resets messages, votes, presence and aliases', () => {
   assert.equal(today(new Date('2026-10-08T14:59:59Z')), '2026-10-08');
   assert.equal(today(new Date('2026-10-08T15:00:00Z')), '2026-10-09');
   const room = newRoom('수업');
   const before = ensureDay(room, '2026-10-08');
   before.polls[0].votes.guest = 2;
+  before.messages.push({ id: 'old', text: '어제 채팅', url: null, pinned: true, createdAt: '2026-10-08T10:00:00Z' });
+  before.presence.guest = Date.now(); before.participants = { guest: '수강생 01' }; before.active = false;
   const after = ensureDay(room, '2026-10-09');
   assert.deepEqual(after.polls[0].votes, {});
-  assert.equal(before.polls[0].votes.guest, 2);
+  assert.deepEqual(after.messages, []); assert.deepEqual(after.presence, {});
+  assert.equal(after.participants, undefined); assert.equal(after.active, true);
+  assert.deepEqual(Object.keys(room.days), ['2026-10-09']);
+  assert.equal(JSON.stringify(room).includes('어제 채팅'), false);
+  assert.throws(() => snapshot(room, '2026-10-08', null, 'local'), /기록이 없습니다/);
 });
 test('changing the same browser vote preserves one response and hides identities', () => {
   const room = newRoom('수업'); const day = ensureDay(room); const id = day.polls[0].id;
@@ -20,6 +26,15 @@ test('changing the same browser vote preserves one response and hides identities
   assert.equal(value.polls[0].total, 2); assert.deepEqual(value.polls[0].counts, [0, 1, 1]); assert.equal(value.polls[0].myVote, 2);
   assert.equal(JSON.stringify(value).includes('guest-1'), false);
   assert.equal('votes' in value.polls[0], false); assert.equal('presence' in value, false);
+});
+test('repeated visits during one day preserve messages, votes and poll IDs', () => {
+  const room = newRoom('수업'); const day = ensureDay(room); const id = day.polls[0].id;
+  mutate(room, { type: 'message', text: '오늘 채팅' }, 'guest', false);
+  mutate(room, { type: 'vote', pollId: id, option: 1 }, 'guest', false);
+  ensureDay(room); ensureDay(room);
+  assert.equal(room.days[today()].messages[0].text, '오늘 채팅');
+  assert.equal(room.days[today()].polls[0].id, id);
+  assert.equal(room.days[today()].polls[0].votes.guest, 1);
 });
 test('students can chat with server assigned aliases but cannot moderate', () => {
   const room = newRoom('수업'); const day = ensureDay(room);

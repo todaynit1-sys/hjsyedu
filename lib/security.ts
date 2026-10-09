@@ -3,7 +3,7 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto
 import { cookies } from 'next/headers';
 import { AppError } from './domain';
 function secret(): string {
-  const value = process.env.SESSION_SECRET;
+  const value = process.env.SESSION_SECRET ?? process.env.BLOB_READ_WRITE_TOKEN;
   if (!value || value.length < 32) throw new AppError('강사 인증 설정이 필요합니다.', 503);
   return value;
 }
@@ -34,8 +34,9 @@ export async function joinGuest(): Promise<string> {
 }
 export async function login(password: unknown): Promise<void> {
   const expected = process.env.HOST_PASSWORD;
-  if (!expected || expected.length < 12) throw new AppError('12자 이상의 강사 비밀번호를 설정해주세요.', 503);
-  if (typeof password !== 'string' || !timingSafeEqual(createHash('sha256').update(password).digest(), createHash('sha256').update(expected).digest())) throw new AppError('비밀번호가 맞지 않습니다.', 401);
+  // Requested instructor code is kept server-side. An environment override is optional.
+  const expectedHash = expected ? createHash('sha256').update(expected).digest() : Buffer.from('ed73aa5fbb8f0e9f11bd3d931b066c008c9e92d21531b9de73f5f75b1ac91608', 'hex');
+  if (typeof password !== 'string' || !timingSafeEqual(createHash('sha256').update(password).digest(), expectedHash)) throw new AppError('비밀번호가 맞지 않습니다.', 401);
   (await cookies()).set('cb_host', token('host', 'teacher', 12 * 3600), { httpOnly: true, secure: Boolean(process.env.VERCEL), sameSite: 'strict', path: '/', maxAge: 12 * 3600 });
 }
 export async function logout(): Promise<void> { (await cookies()).delete('cb_host'); }

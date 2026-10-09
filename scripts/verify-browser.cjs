@@ -1,7 +1,7 @@
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { readFileSync, mkdirSync, writeFileSync } = require('node:fs');
 const assert = require('node:assert/strict');
-const base = 'http://localhost:3010';
+const base = process.env.TEST_BASE_URL || 'http://127.0.0.1:3010';
 async function waitUntil(fn, message) { for (let i=0;i<40;i++) { if(await fn()) return; await new Promise(r=>setTimeout(r,200)); } throw new Error(message); }
 (async () => {
   mkdirSync('.local/screenshots', { recursive: true });
@@ -20,12 +20,24 @@ async function waitUntil(fn, message) { for (let i=0;i<40;i++) { if(await fn()) 
   await page.screenshot({ path: '.local/screenshots/home-desktop.png', fullPage: true });
   await page.keyboard.press('Tab'); assert.equal(await page.locator('.skip-link').evaluate(el=>el===document.activeElement),true);
   await page.getByRole('link',{name:'강사 로그인',exact:true}).click();
-  await page.getByLabel('강사 비밀번호').fill(readFileSync('.local/host-password.txt','utf8').trim());
+  await page.getByLabel('강사 접속 코드').fill(readFileSync('.local/host-password.txt','utf8').trim());
   await page.getByRole('button', { name: '강사로 들어가기' }).click();
   await page.getByRole('heading', { name: '실시간 채팅',exact:true }).waitFor();
   assert.match(page.url(),/host\?room=HJSYAI/);
   const create = await teacher.request.post(base+'/api/rooms', { data: { title: '실시간 기능 검증 수업' } }); assert.equal(create.status(), 200);
   const { code } = await create.json();
+  // An old persisted day must be replaced on GET, even for a stale open-tab date.
+  const rolloverCreate = await teacher.request.post(base+'/api/rooms', { data: { title: '날짜 초기화 검증' } });
+  const rolloverCode = (await rolloverCreate.json()).code;
+  const { DatabaseSync } = require('node:sqlite'); const db = new DatabaseSync('.local/class-board.sqlite');
+  const persisted = JSON.parse(db.prepare('SELECT state FROM rooms WHERE code=?').get(rolloverCode).state);
+  const previousDay = Object.values(persisted.days)[0]; const staleDate = '2020-01-01';
+  previousDay.date = staleDate; previousDay.messages = [{id:'expired',text:'어제 채팅은 삭제',url:null,pinned:true,createdAt:'2020-01-01T00:00:00Z'}];
+  previousDay.polls[0].votes = { expired: 1 }; previousDay.presence = { expired: Date.now() }; previousDay.participants = { expired: '수강생 01' };
+  persisted.days = { [staleDate]: previousDay }; db.prepare('UPDATE rooms SET state=?,revision=revision+1 WHERE code=?').run(JSON.stringify(persisted),rolloverCode);
+  const rolloverResponse = await teacher.request.get(base+'/api/rooms/'+rolloverCode+'?date='+staleDate); assert.equal(rolloverResponse.status(),200);
+  const rolled = await rolloverResponse.json(); assert.notEqual(rolled.date,staleDate); assert.deepEqual(rolled.messages,[]); assert.equal(rolled.polls[0].total,0); assert.equal(rolled.online,0);
+  assert.deepEqual(rolled.dates,[rolled.today]); assert.equal(db.prepare('SELECT state FROM rooms WHERE code=?').get(rolloverCode).state.includes('어제 채팅은 삭제'),false); db.close();
   const roomURL = base+'/api/rooms/'+code;
   assert.equal((await studentA.request.post(base+'/api/rooms', { data: { title:'unauthorized' } })).status(),401);
   await studentA.request.post(roomURL, { data:{type:'join'} }); await studentB.request.post(roomURL,{data:{type:'join'}});
@@ -105,7 +117,7 @@ async function waitUntil(fn, message) { for (let i=0;i<40;i++) { if(await fn()) 
   assert.equal(await student.locator('.compact-poll').count(),1); assert.match(await student.locator('.compact-poll-total').innerText(),/18명/);
   await student.getByRole('button',{name:'현재 투표 보기',exact:true}).click(); await student.getByLabel('강의실 설정',{exact:true}).click();
   assert.deepEqual(errors,[]);
-  writeFileSync('.local/browser-verification.json',JSON.stringify({passed:true,code,checks:['homepage opens chat without a code','concurrent first visitors share one main room','host login opens main room directly','host authentication','anonymous guest chat and server assigned role','host-only moderation','safe URL validation','cross-origin mutation rejection','two guest vote updates','16 concurrent votes without loss','poll archive preservation','two-way live chat','Korean composition Enter guard','pinned messages','custom poll publication','closed lecture chat and vote rejection','student vote delivery','QR image and modal keyboard close','chat composer and polls in first viewport at 1440x900/390x844/320x568','host 320 layout','entry 320 layout','skip link keyboard','no browser errors'],screenshots:8},null,2));
+  writeFileSync('.local/browser-verification.json',JSON.stringify({passed:true,code,checks:['0423 instructor login','persisted daily expiration on stale-date GET','homepage opens chat without a code','concurrent first visitors share one main room','host login opens main room directly','host authentication','anonymous guest chat and server assigned role','host-only moderation','safe URL validation','cross-origin mutation rejection','two guest vote updates','16 concurrent votes without loss','poll archive preservation','two-way live chat','Korean composition Enter guard','pinned messages','custom poll publication','closed lecture chat and vote rejection','student vote delivery','QR image and modal keyboard close','chat composer and polls in first viewport at 1440x900/390x844/320x568','host 320 layout','entry 320 layout','skip link keyboard','no browser errors'],screenshots:8},null,2));
   console.log('PASS: authentication, live messaging, voting, 16 simultaneous responses, archives, QR sharing, keyboard and 1440/390/320 layouts.');
   await browser.close();
 })().catch(e=>{ console.error(e);process.exit(1); });

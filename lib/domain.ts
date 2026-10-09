@@ -16,6 +16,8 @@ export function newPoll(kind: PollKind, question?: string, options?: string[]): 
   };
 }
 export function ensureDay(room: Room, date = today()): Day {
+  // Only today's data is retained; yesterday's messages, votes and aliases expire together.
+  for (const previous of Object.keys(room.days)) if (previous !== date) delete room.days[previous];
   if (!room.days[date]) room.days[date] = { date, active: true, messages: [], polls: [newPoll('mood'), newPoll('break')], presence: {} };
   return room.days[date];
 }

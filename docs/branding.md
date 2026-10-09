@@ -23,3 +23,7 @@ Create an adorable professional mascot logo asset for an AI education brand. TWO
 ## Thumbnail
 
 Create a finished very cute brand thumbnail for an AI education live classroom. One landscape 16:9 image. Exact text on the LEFT: "HJSY" large bold friendly violet sans-serif, underneath "AI edu", and a smaller clean line "LIVE CHAT · LIVE POLLS". On the RIGHT a cheerful male lavender teddy BEAR with round ears, mint neck bow tie and a cream shirt labeled with the EXACT readable initials "HJ", beside a cheerful female peach-pink BUNNY with long rounded ears, small lavender ear ribbon and a cream shirt labeled with the EXACT readable initials "SY". They are friendly co-teachers waving hello, chubby plush clay-like style, tiny paws and feet, happy eyes, soft rosy cheeks. Clear distinct animal silhouettes, no HS logo. Background pastel cream and pale lavender with sparse mint star accents, subtle soft chat bubbles and a small book nearby. Excellent polished composition, large readable typography, generous margins, soft studio shadows. Sweet Korean educational brand atmosphere. No people, no robots, no phone mockup, no website screenshot, no extra words, no watermark.
+
+## 참여 QR
+
+사용자가 제공한 450×450 PNG 원본을 `public/branding/participation-qr.png`로 보관합니다. ZXing으로 확인한 주소는 `https://hjsyedu.vercel.app/`입니다. 이 도메인의 기본 강의실 공유 창에서 원본을 사용하며, 다른 주소나 별도 강의실에서는 해당 링크의 QR을 새로 생성합니다.
