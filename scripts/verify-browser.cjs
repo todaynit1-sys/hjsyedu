@@ -91,7 +91,7 @@ async function waitUntil(fn, message) { for (let i=0;i<40;i++) { if(await fn()) 
     const composer = await student.getByLabel('채팅 메시지',{exact:true}).boundingBox(); assert(composer.y>=0 && composer.y+composer.height<=height,'Composer outside first viewport at '+width);
     const pollScroll=await student.locator('.live-poll-scroll').boundingBox();
     for(const kind of ['mood','break']) {
-      const heading=await student.locator('.compact-poll.poll-'+kind+' h3').boundingBox(); assert(heading.y>=0&&heading.y+heading.height<=height,'Poll outside first viewport at '+width);
+      const heading=await student.locator('.compact-poll.poll-'+kind+' .compact-poll-kind').boundingBox(); assert(heading.y>=0&&heading.y+heading.height<=height,'Poll outside first viewport at '+width);
       for(const choice of await student.locator('.compact-poll.poll-'+kind+' .compact-choice').all()) { const box=await choice.boundingBox(); assert(box.y>=pollScroll.y&&box.y+box.height<=pollScroll.y+pollScroll.height+1,'Clipped poll choice at '+width); }
     }
     await student.waitForTimeout(4200);
