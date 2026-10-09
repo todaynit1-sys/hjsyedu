@@ -170,6 +170,36 @@ input::placeholder,textarea::placeholder{color:#778599}
   .live-chat-heading{padding-top:3px;padding-bottom:3px}
 }
 
+/* Desktop: show both quick polls beside chat without scrolling on laptop screens. */
+@media(min-width:761px){
+  .live-header{height:60px}
+  .live-title{padding-top:12px;padding-bottom:12px}
+  .live-workspace{gap:16px;padding-bottom:14px}
+  .live-polls{padding-top:0}
+  .live-polls-heading{min-height:38px;margin-bottom:10px;gap:4px}
+  .live-polls-heading h2{font-size:16px}
+  .live-polls-heading>span{font-size:11px}
+  .live-poll-scroll{gap:10px;padding-bottom:4px}
+  .compact-poll{padding:10px}
+  .compact-poll-top{margin-bottom:5px}
+  .compact-poll h3,.compact-poll.poll-break h3,.compact-poll.poll-custom h3{font-size:15px;margin-bottom:8px}
+  .compact-poll.poll-mood .compact-choices{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  .compact-poll.poll-break .compact-choices{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+  .compact-poll.poll-mood .compact-choice,.compact-poll.poll-break .compact-choice{min-height:56px;padding:6px 4px;flex-direction:column;justify-content:center;gap:2px;text-align:center}
+  .compact-poll.poll-mood .compact-choice>svg{display:none}
+  .compact-poll.poll-mood .choice-name,.compact-poll.poll-break .choice-name{flex:none;white-space:normal;word-break:keep-all}
+  .compact-poll-foot{min-height:16px;margin-top:6px}
+  .live-poll-note{padding-top:4px;padding-bottom:4px}
+}
+
+@media(min-width:761px) and (max-height:640px){
+  .live-header{height:52px}
+  .live-title{padding-top:6px;padding-bottom:6px}
+  .live-workspace{padding-bottom:8px}
+  .compact-poll-tools summary{min-height:24px}
+  .compact-poll.poll-mood .compact-choice,.compact-poll.poll-break .compact-choice{min-height:52px;padding-top:4px;padding-bottom:4px}
+}
+
 /* Mobile: keep both quick polls usable while reserving most of the screen for chat. */
 @media(max-width:760px){
   .live-poll-scroll{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:6px;max-height:136px}

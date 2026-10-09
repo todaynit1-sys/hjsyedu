@@ -64,8 +64,9 @@ export class ClassBoard extends DurableObject<Env> {
   }
   private async room(code: string): Promise<Room> {
     let room = await this.ctx.storage.get<Room>(`room:${code}`);
-    if (!room && code === MAIN_ROOM_CODE) { room = newRoom('현준선영 AI 교육'); room.code = MAIN_ROOM_CODE; await this.ctx.storage.put(`room:${code}`, room); }
+    if (!room && code === MAIN_ROOM_CODE) { room = newRoom('HJSY AI edu'); room.code = MAIN_ROOM_CODE; await this.ctx.storage.put(`room:${code}`, room); }
     if (!room) throw new AppError('강의실을 찾을 수 없습니다. 참여 코드를 확인해주세요.', 404);
+    if (code === MAIN_ROOM_CODE && room.title === '현준선영 AI 교육') { room.title = 'HJSY AI edu'; await this.ctx.storage.put(`room:${code}`, room); }
     if (!room.days[today()] || Object.keys(room.days).length !== 1) { ensureDay(room); await this.ctx.storage.put(`room:${code}`, room); }
     return room;
   }
