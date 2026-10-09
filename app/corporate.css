@@ -9,6 +9,20 @@
   --mint:#eef1f8;
 }
 body{color:var(--ink)}
+.room-accessible-title{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.live-room .live-workspace{padding-top:16px}
+.live-header .live-room-actions{gap:10px}
+.live-header .room-settings summary{width:38px;height:38px}
+@media(max-width:760px){
+  .live-room .live-workspace{padding-top:10px}
+  .live-header .live-online{display:none}
+  .live-header .live-room-actions{gap:0}
+  .live-header .room-settings summary{width:32px;height:36px}
+}
+@media(max-width:360px){
+  .live-share>span{display:none}
+  .live-header .live-share{width:36px;min-width:36px;padding:5px;justify-content:center}
+}
 ::selection{background:#dbe2f5}
 button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline-color:#4656a5}
 input,textarea{border-color:#cfd7e2;border-radius:8px}
