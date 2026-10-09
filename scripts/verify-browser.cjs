@@ -23,7 +23,9 @@ async function waitUntil(fn, message) { for (let i=0;i<40;i++) { if(await fn()) 
   assert.equal((await studentA.request.post(base+'/api/rooms', { data: { title:'unauthorized' } })).status(),401);
   await studentA.request.post(roomURL, { data:{type:'join'} }); await studentB.request.post(roomURL,{data:{type:'join'}});
   const initial = await (await studentA.request.get(roomURL)).json(); const pollId = initial.polls[0].id;
-  assert.equal((await studentA.request.post(roomURL,{data:{type:'message',text:'unauthorized'}})).status(),401);
+  const guestChat = await studentA.request.post(roomURL,{data:{type:'message',text:'익명 채팅 검증',author:'host',authorName:'강사'}}); assert.equal(guestChat.status(),200);
+  const guestMessage = (await guestChat.json()).messages.at(-1); assert.equal(guestMessage.author,'student'); assert.equal(guestMessage.authorName,'수강생 01'); assert.equal(guestMessage.mine,true); assert.equal('authorId' in guestMessage,false);
+  assert.equal((await studentA.request.post(roomURL,{data:{type:'pin',id:guestMessage.id}})).status(),401);
   assert.equal((await teacher.request.post(roomURL,{data:{type:'message',text:'unsafe',url:'javascript:alert(1)'}})).status(),400);
   await Promise.all([studentA.request.post(roomURL,{data:{type:'vote',pollId,option:0}}),studentB.request.post(roomURL,{data:{type:'vote',pollId,option:2}})]);
   let value = await (await teacher.request.get(roomURL)).json(); assert.equal(value.polls[0].total,2); assert.deepEqual(value.polls[0].counts,[1,0,1]);
@@ -41,12 +43,20 @@ async function waitUntil(fn, message) { for (let i=0;i<40;i++) { if(await fn()) 
   assert.equal((await teacher.request.post(roomURL,{headers:{origin:'https://other.example'},data:{type:'message',text:'cross-origin'}})).status(),403);
   await page.goto(base+'/host?room='+code); await page.getByRole('heading',{name:'실시간 기능 검증 수업'}).waitFor();
   const student = await studentA.newPage(); student.on('pageerror',e=>errors.push(e.message)); await student.goto(base+'/room/'+code); await student.getByRole('heading',{name:'실시간 기능 검증 수업'}).waitFor();
-  await page.getByLabel('강의 소식 내용').fill('실시간으로 전달되는 강의 소식입니다.'); await page.getByRole('button',{name:'게시하기',exact:true}).click();
-  await student.getByText('실시간으로 전달되는 강의 소식입니다.',{exact:true}).waitFor({timeout:10000});
-  await page.getByRole('button',{name:'링크 첨부',exact:true}).click(); await page.getByLabel('링크 제목').fill('실습 자료'); await page.getByLabel('링크 주소').fill('https://chatgpt.com/'); await page.getByRole('button',{name:'게시하기',exact:true}).click();
-  await student.getByRole('heading',{name:'실습 자료'}).waitFor({timeout:10000});
-  await page.getByRole('button',{name:'상단 고정',exact:true}).last().click();
-  await student.locator('.pinned-card').waitFor({timeout:10000});
+  await page.getByLabel('채팅 메시지',{exact:true}).fill('강사와 수강생이 함께 나누는 실시간 채팅입니다.'); await page.getByRole('button',{name:'메시지 보내기',exact:true}).click();
+  await student.getByText('강사와 수강생이 함께 나누는 실시간 채팅입니다.',{exact:true}).waitFor({timeout:10000});
+  await student.getByLabel('채팅 메시지',{exact:true}).fill('한글 조합 중');
+  await student.getByLabel('채팅 메시지',{exact:true}).evaluate(el=>el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',bubbles:true,isComposing:true})));
+  assert.equal(await student.getByLabel('채팅 메시지',{exact:true}).inputValue(),'한글 조합 중');
+  assert.equal((await(await teacher.request.get(roomURL)).json()).messages.some(m=>m.text==='한글 조합 중'),false);
+  await student.getByLabel('채팅 메시지',{exact:true}).fill('수강생 질문이 강사에게 보이나요?'); await student.getByLabel('채팅 메시지',{exact:true}).press('Enter');
+  await page.getByText('수강생 질문이 강사에게 보이나요?',{exact:true}).waitFor({timeout:10000});
+  await page.getByRole('button',{name:'링크 첨부',exact:true}).click(); await page.getByLabel('채팅 메시지',{exact:true}).fill('실습 자료'); await page.getByLabel('링크 주소').fill('https://chatgpt.com/'); await page.getByRole('button',{name:'메시지 보내기',exact:true}).click();
+  await student.getByText('실습 자료',{exact:true}).waitFor({timeout:10000});
+  await page.locator('.chat-message').filter({hasText:'실습 자료'}).locator('.message-menu summary').click();
+  await page.getByRole('button',{name:'상단 고정',exact:true}).click();
+  await student.locator('.chat-pinned').waitFor({timeout:10000});
+  await page.getByRole('button',{name:'새 투표 만들기',exact:true}).click();
   await page.getByRole('button',{name:'새 질문 만들기'}).click();
   await page.getByLabel('질문',{exact:true}).fill('실습을 따라오고 있나요?');
   await page.getByLabel('응답 항목',{exact:true}).fill('잘 따라가고 있어요\n한 번 더 알려주세요');
@@ -57,14 +67,23 @@ async function waitUntil(fn, message) { for (let i=0;i<40;i++) { if(await fn()) 
   await waitUntil(async()=>{ const s=await(await teacher.request.get(roomURL)).json();return s.polls.find(p=>p.id===newPoll.id).counts[0]===1; },'Student vote did not arrive');
   await teacher.request.post(roomURL,{data:{type:'active',active:false}});
   assert.equal((await studentA.request.post(roomURL,{data:{type:'vote',pollId:newPoll.id,option:0}})).status(),409);
+  assert.equal((await studentA.request.post(roomURL,{data:{type:'message',text:'종료된 강의에 전송'}})).status(),409);
   await teacher.request.post(roomURL,{data:{type:'active',active:true}});
   await page.getByRole('button',{name:'참여 링크',exact:true}).click(); await page.getByAltText('강의실 '+code+' 참여 QR코드').waitFor();
   assert.equal(await page.locator('dialog').evaluate(el=>el.open),true);
   await page.screenshot({path:'.local/screenshots/share-qr.png',fullPage:true}); await page.keyboard.press('Escape'); assert.equal(await page.locator('dialog').count(),0);
-  for (const width of [1440,390,320]) {
-    await student.setViewportSize({width,height:1000});
+  for (const [width,height] of [[1440,900],[390,844],[320,568]]) {
+    await student.setViewportSize({width,height});
     await student.evaluate(()=>{document.activeElement?.blur();window.scrollTo({top:0,left:0,behavior:'instant'})});
     assert.equal(await student.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth),true, 'Overflow at '+width);
+    assert.equal(await student.evaluate(()=>document.documentElement.scrollHeight<=innerHeight),true,'Page scroll at '+width);
+    const composer = await student.getByLabel('채팅 메시지',{exact:true}).boundingBox(); assert(composer.y>=0 && composer.y+composer.height<=height,'Composer outside first viewport at '+width);
+    const pollScroll=await student.locator('.live-poll-scroll').boundingBox();
+    for(const kind of ['mood','break']) {
+      const heading=await student.locator('.compact-poll.poll-'+kind+' h3').boundingBox(); assert(heading.y>=0&&heading.y+heading.height<=height,'Poll outside first viewport at '+width);
+      for(const choice of await student.locator('.compact-poll.poll-'+kind+' .compact-choice').all()) { const box=await choice.boundingBox(); assert(box.y>=pollScroll.y&&box.y+box.height<=pollScroll.y+pollScroll.height+1,'Clipped poll choice at '+width); }
+    }
+    await student.waitForTimeout(4200);
     await student.screenshot({path:'.local/screenshots/student-'+width+'.png',fullPage:true});
   }
   await page.evaluate(()=>{document.activeElement?.blur();window.scrollTo({top:0,left:0,behavior:'instant'})});
@@ -73,8 +92,12 @@ async function waitUntil(fn, message) { for (let i=0;i<40;i++) { if(await fn()) 
   await page.evaluate(()=>window.scrollTo({top:0,left:0,behavior:'instant'}));
   await page.screenshot({path:'.local/screenshots/teacher-mobile.png',fullPage:true});
   await page.goto(base); assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth),true,'Entry overflow at 320'); await page.screenshot({path:'.local/screenshots/home-mobile.png',fullPage:true});
+  await student.getByLabel('강의실 설정',{exact:true}).click();
+  await student.getByRole('button',{name:'이전 투표 결과 보기',exact:true}).click();
+  assert.equal(await student.locator('.compact-poll').count(),1); assert.match(await student.locator('.compact-poll-total').innerText(),/18명/);
+  await student.getByRole('button',{name:'현재 투표 보기',exact:true}).click(); await student.getByLabel('강의실 설정',{exact:true}).click();
   assert.deepEqual(errors,[]);
-  writeFileSync('.local/browser-verification.json',JSON.stringify({passed:true,code,checks:['host authentication','student write authorization','safe URL validation','cross-origin mutation rejection','two guest vote updates','16 concurrent votes without loss','poll archive preservation','real browser publication and live student delivery','pinned notices','custom poll publication','closed lecture vote rejection','student vote delivery','QR image and modal keyboard close','1440/390/320 layout','host 320 layout','entry 320 layout','skip link keyboard','no browser errors'],screenshots:8},null,2));
+  writeFileSync('.local/browser-verification.json',JSON.stringify({passed:true,code,checks:['host authentication','anonymous guest chat and server assigned role','host-only moderation','safe URL validation','cross-origin mutation rejection','two guest vote updates','16 concurrent votes without loss','poll archive preservation','two-way live chat','Korean composition Enter guard','pinned messages','custom poll publication','closed lecture chat and vote rejection','student vote delivery','QR image and modal keyboard close','chat composer and polls in first viewport at 1440x900/390x844/320x568','host 320 layout','entry 320 layout','skip link keyboard','no browser errors'],screenshots:8},null,2));
   console.log('PASS: authentication, live messaging, voting, 16 simultaneous responses, archives, QR sharing, keyboard and 1440/390/320 layouts.');
   await browser.close();
 })().catch(e=>{ console.error(e);process.exit(1); });

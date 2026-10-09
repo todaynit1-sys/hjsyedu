@@ -21,12 +21,25 @@ test('changing the same browser vote preserves one response and hides identities
   assert.equal(JSON.stringify(value).includes('guest-1'), false);
   assert.equal('votes' in value.polls[0], false); assert.equal('presence' in value, false);
 });
-test('students cannot publish, pin or delete; closed and historical votes reject', () => {
+test('students can chat with server assigned aliases but cannot moderate', () => {
   const room = newRoom('수업'); const day = ensureDay(room);
-  for (const type of ['message', 'pin', 'delete', 'active', 'poll-create']) assert.throws(() => mutate(room, { type, text: 'hello' }, 'student', false), /강사 로그인/);
+  for (const type of ['pin', 'delete', 'active', 'poll-create']) assert.throws(() => mutate(room, { type, text: 'hello' }, 'student', false), /강사 로그인/);
+  mutate(room, { type: 'message', text: '질문 있어요', author: 'host', authorName: '강사' }, 'student', false);
+  mutate(room, { type: 'message', text: '한 번 더요' }, 'student', false);
+  const value = snapshot(room, today(), 'student', 'local');
+  assert.equal(value.messages[0].author, 'student'); assert.equal(value.messages[0].authorName, '수강생 01');
+  assert.equal(value.messages[1].authorName, '수강생 01'); assert.equal(value.messages[0].mine, true);
+  assert.equal('authorId' in value.messages[0], false); assert.equal('participants' in value, false);
   mutate(room, { type: 'poll-toggle', id: day.polls[0].id }, null, true);
   assert.throws(() => mutate(room, { type: 'vote', pollId: day.polls[0].id, option: 0 }, 'student', false), /마감/);
   assert.throws(() => mutate(room, { type: 'message', text: 'hi', date: '2020-01-01' }, null, true), /지난 강의/);
+});
+test('guest chat is rate limited and rejects ended sessions', () => {
+  const room = newRoom('수업');
+  for (let i = 0; i < 10; i++) mutate(room, { type: 'message', text: '안녕하세요' }, 'guest', false);
+  assert.throws(() => mutate(room, { type: 'message', text: '한 번 더' }, 'guest', false), /너무 빠르게/);
+  mutate(room, { type: 'active', active: false }, null, true);
+  assert.throws(() => mutate(room, { type: 'message', text: '끝' }, 'another', false), /종료/);
 });
 test('a fresh poll archives its results instead of deleting them', () => {
   const room = newRoom('수업'); const day = ensureDay(room); const old = day.polls[0];

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 export function Brand() {
-  return <Link href="/" className="brand" aria-label="틈 홈"><span className="brand-symbol" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M5 6h22v16H14l-7 5v-5H5z" fill="currentColor"/><path d="M10 12h12M10 16h8" stroke="var(--forest)" strokeWidth="2" strokeLinecap="round"/></svg></span><span className="brand-name">틈<span className="brand-en">teum</span></span></Link>;
+  return <Link href="/" className="brand" aria-label="현준선영 HJSY AI edu 홈"><Image className="brand-mark" src="/branding/hj-sy-characters.png" width={48} height={48} sizes="48px" alt="HJ 곰과 SY 토끼 로고" /><span className="brand-wordmark">HJSY <span>AI <em>edu</em></span><small>현준선영의 AI 교실</small></span></Link>;
 }
