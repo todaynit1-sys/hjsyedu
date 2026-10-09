@@ -1,0 +1,6 @@
+.local
+.env.local
+tests
+scripts/verify-browser.cjs
+node_modules
+.next

@@ -1,0 +1,30 @@
+{
+  "name": "class-board",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": "24.x" },
+  "scripts": {
+    "dev": "next dev --webpack --hostname 0.0.0.0 --port 3010",
+    "build": "next build --webpack",
+    "start": "next start --hostname 0.0.0.0 --port 3010",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.mts",
+    "setup:local": "node scripts/setup-local.mjs"
+  },
+  "dependencies": {
+    "next": "16.3.8",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "lucide-react": "1.49.0",
+    "qrcode": "1.5.4",
+    "server-only": "0.0.1"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "@types/node": "26.6.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/qrcode": "1.5.6"
+  }
+}
