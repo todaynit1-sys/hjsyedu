@@ -1,5 +1,6 @@
 {
-  "name": "hjsyedu",
+  "name": "edu",
+  "account_id": "1ab0cc202cc88e4caa80a36f2450d352",
   "main": "worker/index.ts",
   "compatibility_date": "2026-10-09",
   "workers_dev": true,

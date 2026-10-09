@@ -14,7 +14,7 @@ React/Vite 화면과 Cloudflare Worker, SQLite 기반 Durable Object를 한 프�
 
 | 항목 | 값 |
 | --- | --- |
-| 프로젝트/Worker 이름 | `hjsyedu` |
+| 프로젝트/Worker 이름 | `edu` |
 | 루트 디렉터리 | 저장소 루트 (빈 값 또는 `/`) |
 | 빌드 명령 | `npm run build` |
 | 배포 명령 | `npx wrangler deploy` |
@@ -22,7 +22,7 @@ React/Vite 화면과 Cloudflare Worker, SQLite 기반 Durable Object를 한 프�
 
 설치 단계는 잠금 파일의 `npm ci`를 사용합니다. `wrangler.jsonc`에 정적 파일, API 라우팅, Durable Object 연결과 최초 생성 설정이 모두 들어 있습니다. 데이터 저장소를 대시보드에서 따로 만들 필요 없습니다. 별도의 환경 변수나 비밀번호 입력 없이 기본 코드 `0423`을 사용할 수 있습니다.
 
-현재 배포 주소는 `https://hjsyedu.ondoco.workers.dev/`입니다. 브랜드 이름을 유지하도록 Worker 이름을 `hjsyedu`로 복원했으며 강의실 저장소는 유지됩니다. 다시 배포할 때도 Worker 이름을 `hjsyedu`로 사용하세요. 다른 계정에서는 `https://hjsyedu.<본인 서브도메인>.workers.dev` 형식이 됩니다.
+현재 배포 주소는 `https://edu.hjsy.workers.dev/`입니다. 새 Cloudflare 계정의 서브도메인은 `hjsy`, Worker 이름은 `edu`입니다. `wrangler.jsonc`의 `account_id`는 이 새 계정으로 고정되어 있습니다. 다른 계정에서 배포하려면 해당 계정 ID로 변경하세요. 기존 계정의 강의실 데이터는 새 계정으로 자동 이전되지 않습니다.
 
 공식 안내: [Git 연결](https://developers.cloudflare.com/workers/ci-cd/builds/git-integration/), [빌드 설정](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/).
 
