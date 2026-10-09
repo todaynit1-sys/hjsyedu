@@ -10,9 +10,9 @@ Corporate thumbnail route: built-in image_gen. Final prompt:
 
 Create a finished restrained corporate education brand thumbnail. Landscape 16:9. Exact typography: "HJSY" in large bold modern dark navy sans-serif, below it "AI edu" in sophisticated muted indigo. A small precise subtitle "LIVE CLASSROOM". Layout is a clean typographic Swiss editorial brand cover: left aligned text with generous white space, small HJ and SY letter monogram in a thin outlined square at the upper left, subtle architectural fine gray grid lines and two understated overlapping translucent indigo geometric panels on the right suggesting knowledge and collaboration. Pure warm white background, dark charcoal navy, cool gray and one muted indigo accent. Extremely professional, confident, calm enterprise training aesthetic. Crisp flat graphics and typography, high legibility, carefully aligned margins, very little decoration. No cartoon characters, no animals, no smiling faces, no toys, no plush texture, no people, no stock photo, no neon, no dramatic gradients, no fake UI screenshots, no extra words, no watermark. Deliver one complete finished 16:9 thumbnail.
 
-HJ: lavender male bear with a mint bow tie. SY: peach female rabbit with a lavender ear ribbon. Website colors and avatars follow this pair. The character artwork is a transparent PNG; the favicon and compact vector mark are a simplified bear/rabbit pair. Previous drafts are excluded from Git.
+HJ: lavender male bear with a mint bow tie. SY: peach female rabbit with a lavender ear ribbon. These are retained resources from the earlier mascot direction. The character artwork is a transparent PNG; the favicon and compact vector mark are a simplified bear/rabbit pair. Previous drafts are excluded from Git.
 
-Assets: `public/branding/hj-sy-characters.png` (1246 × 1263, transparent), `public/branding/hjsy-thumbnail.png` (1672 × 941), `public/branding/hj-sy-mark.svg`, `public/branding/hjsy-logo.svg`. The PNGs are served through Next Image where used in UI. The thumbnail also appears in Open Graph and Twitter metadata.
+Assets: `public/branding/hj-sy-characters.png` (1246 × 1263, transparent), `public/branding/hjsy-thumbnail.png` (1672 × 941), `public/branding/hj-sy-mark.svg`, `public/branding/hjsy-logo.svg`. The current corporate thumbnail is served as a static image on the optional entry page.
 
 Generation route: built-in image_gen via imagegen skill; outputs copied into this project. Final prompts:
 
@@ -26,4 +26,4 @@ Create a finished very cute brand thumbnail for an AI education live classroom. 
 
 ## 참여 QR
 
-사용자가 제공한 450×450 PNG 원본을 `public/branding/participation-qr.png`로 보관합니다. ZXing으로 확인한 주소는 `https://hjsyedu.vercel.app/`입니다. 이 도메인의 기본 강의실 공유 창에서 원본을 사용하며, 다른 주소나 별도 강의실에서는 해당 링크의 QR을 새로 생성합니다.
+사용자가 제공한 450×450 PNG 원본을 `public/branding/participation-qr.png`로 보관합니다. ZXing으로 확인한 주소는 `https://hjsyedu.vercel.app/`입니다. 원본은 보관하며, Cloudflare에서 사용하는 공유 창은 현재 도메인과 강의실 주소로 새 QR을 생성합니다.

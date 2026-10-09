@@ -1,7 +1,0 @@
-{
-  "framework": "nextjs",
-  "buildCommand": "npm run build",
-  "installCommand": "npm ci",
-  "regions": ["icn1"],
-  "crons": [{ "path": "/api/maintenance/daily-cleanup", "schedule": "0 15 * * *" }]
-}

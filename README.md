@@ -1,73 +1,93 @@
-# HJSY AI edu — 현준선영의 AI 교실
+# HJSY AI edu · Cloudflare 실시간 강의실
 
-강사와 수강생이 채팅·링크를 실시간으로 나누는 독립 Next.js 프로젝트입니다. 사이트에 접속하면 코드 입력 없이 기본 강의실의 채팅·투표가 바로 열립니다. 수강생은 로그인 없이 참여하며 하루 동안 같은 브라우저에 같은 익명 번호를 부여합니다. 기본 화면은 화이트·차콜·인디고의 기업 교육 스타일이며, HJ/SY 글자형 로고를 사용합니다. 기존 캐릭터 파일은 별도 브랜드 자료로 보관합니다.
+홈페이지를 열면 기본 강의실의 채팅과 투표가 바로 보입니다. 웹·모바일에서 로그인 없이 참여할 수 있고, 강사는 **강사 관리**에서 접속 코드 **0423**으로 들어갑니다. 현재의 화이트·차콜·인디고 디자인과 HJ/SY 로고를 유지했습니다.
 
-## 실행
+React/Vite 화면과 Cloudflare Worker, SQLite 기반 Durable Object를 한 프로젝트로 배포합니다. Supabase, Vercel Blob, 별도 데이터베이스 계정이나 연결 토큰은 필요 없습니다. 채팅·투표 결과는 WebSocket으로 전달하며, 주기적인 HTTP 조회는 사용하지 않습니다.
 
-Node.js 24에서 이 폴더를 열고 실행합니다.
+## Cloudflare에서 GitHub로 배포
+
+**Workers 프로젝트**로 만드세요. 정적 Pages 프로젝트만 만들면 채팅 서버가 실행되지 않습니다.
+
+1. Cloudflare 대시보드 → Workers & Pages → 새 애플리케이션 생성 → GitHub 저장소 연결.
+2. 저장소 `todaynit1-sys/hjsyedu`, 브랜치 `main`을 선택합니다.
+3. 아래 설정을 입력하고 배포합니다.
+
+| 항목 | 값 |
+| --- | --- |
+| 프로젝트/Worker 이름 | `hjsyedu` |
+| 루트 디렉터리 | 저장소 루트 (빈 값 또는 `/`) |
+| 빌드 명령 | `npm run build` |
+| 배포 명령 | `npx wrangler deploy` |
+| 빌드 환경 변수 | `NODE_VERSION` = `24` |
+
+설치 단계는 잠금 파일의 `npm ci`를 사용합니다. `wrangler.jsonc`에 정적 파일, API 라우팅, Durable Object 연결과 최초 생성 설정이 모두 들어 있습니다. 데이터 저장소를 대시보드에서 따로 만들 필요 없습니다. 별도의 환경 변수나 비밀번호 입력 없이 기본 코드 `0423`을 사용할 수 있습니다.
+
+완료 후 Cloudflare가 보여주는 `https://hjsyedu.<본인 서브도메인>.workers.dev`를 여세요. 실제 주소의 서브도메인은 계정마다 다릅니다.
+
+공식 안내: [Git 연결](https://developers.cloudflare.com/workers/ci-cd/builds/git-integration/), [빌드 설정](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/).
+
+## 터미널에서 직접 배포
+
+Node.js 24와 npm을 설치한 뒤 저장소 폴더에서 실행합니다.
 
 ```sh
 npm ci
-npm run setup:local
+npx wrangler login
+npm run deploy
+```
+
+`npm run deploy`는 화면을 빌드한 다음 실제 Cloudflare 계정에 배포합니다. 배포 전 패키지만 확인하려면 아래 dry-run을 사용하세요. dry-run은 실제 서비스를 게시하지 않습니다.
+
+```sh
+npm run build
+npm run build:worker-test
+```
+
+최초 배포 후 `wrangler.jsonc`의 `name`, `class_name`, migration `v1`을 임의로 바꾸지 마세요. 같은 이름으로 재배포하면 기존 강의실과 로그인 서명 키를 이어서 사용합니다.
+
+## 강의할 때
+
+- 수강생: 홈페이지 주소를 열면 기본 채팅과 컨디션·휴식 투표에 바로 참여합니다.
+- 강사: 오른쪽 위 **강사 관리** → **0423**. 채팅·링크 공유, 메시지 고정·삭제, 새 투표, 다시 묻기, 강의 종료·재개를 사용할 수 있습니다.
+- 공유: **참여 링크**를 누르면 현재 접속한 도메인으로 링크와 QR이 생성됩니다. 별도 강의실은 그 강의실 주소를 공유합니다.
+- 별도 수업: 강사 관리의 강의실 목록에서 새 강의실을 만들고 6자리 코드나 참여 링크를 전달합니다.
+
+이전에 제공한 공룡 QR 원본은 `https://hjsyedu.vercel.app/` 주소입니다. 파일은 브랜드 자료로 보관하지만 새 Cloudflare 주소의 공유 창에서는 새 QR을 생성합니다. 배포 후 **QR코드 저장**으로 새 코드를 내려받아 사용하세요.
+
+## 저장·초기화
+
+채팅, 투표, 같은 날의 이전 투표 결과, 익명 수강생 번호는 **한국 시간 오늘 하루**만 보관합니다. 한국 시간 자정에 Durable Object 알람이 전날 데이터를 삭제하고, 접속 중인 화면에 초기화 결과를 전달합니다. 알람이 지연되더라도 다음 조회·전송 시 날짜를 확인해 오래된 데이터를 삭제합니다. 강의실 이름과 참여 코드는 유지됩니다.
+
+접속자 수는 연결된 수강생 브라우저를 기준으로 집계합니다. 같은 브라우저의 여러 탭은 한 명이며, 강사 화면은 수강생 수에 포함하지 않습니다. 응답은 브라우저별 한 표로 집계하고 변경할 수 있습니다. 개인 식별 정보를 요구하지 않으며 다른 브라우저에서는 별도 참여자로 취급됩니다.
+
+강사 세션은 12시간, 익명 참여 쿠키는 30일입니다. 쿠키가 유지되어도 전날 채팅·투표·익명 번호는 남기지 않습니다. 쿠키는 서버 서명과 HttpOnly/SameSite 설정을 사용하고, 서명 키는 서버에서 자동 생성·보관합니다. 관리 동작은 서버에서 권한을 확인합니다.
+
+강의실 최대 100개, 강의실별 하루 메시지 최대 2,000개·투표 최대 50개, 저장 데이터 약 900KB 제한을 둡니다. 한 수강생의 채팅은 분당 10개까지입니다. 50명 동시 접속·투표를 로컬 Cloudflare 런타임에서 검증했습니다.
+
+## 비용
+
+Cloudflare **Workers Free**에서 사용할 수 있는 SQLite Durable Objects로 구성했습니다. 유료 플랜을 켜거나 유료 저장소를 연결할 필요 없습니다. 무료 요청·실행·저장 한도를 넘으면 서비스가 제한될 수 있으며, 50명이라는 접속 인원만으로 월 사용량을 확정할 수는 없습니다. 계정의 플랜과 사용량을 Cloudflare에서 확인하세요.
+
+공식 기준: [Durable Objects 무료 한도](https://developers.cloudflare.com/durable-objects/platform/pricing/), [Workers 한도](https://developers.cloudflare.com/workers/platform/limits/).
+
+## 로컬 실행·검증
+
+```sh
+npm ci
 npm run dev
 ```
 
-- 홈: http://localhost:3010
-- 기본 강의실: `HJSYAI` (최초 접속 시 한 번 생성, 같은 날 기록 유지, 다음 날 초기화)
-- 별도 강의실 코드 입력: http://localhost:3010/join
-- 수강생 미리보기: http://localhost:3010/room/DEMO26
-- 강사: http://localhost:3010/host
-- 강사 기본 접속 코드: 요청한 코드가 서버에 반영되어 있음 (`HOST_PASSWORD`로 변경 가능)
-- 로컬 데이터: `.local/class-board.sqlite` (Git 제외, 서버 재시작 후에도 보존)
-
-## 강의에서 사용하기
-
-1. 홈페이지의 ‘강사 관리’ 버튼으로 로그인하면 기본 강의실 관리 화면이 바로 열립니다. 강의실 목록에서 별도 강의실을 만들 수도 있습니다.
-2. ‘참여 링크’에서 링크 또는 QR코드를 공유합니다. 수강생은 계정 없이 참여합니다.
-3. 채팅 입력창에서 메시지를 보내거나 ‘링크 첨부’로 자료를 공유합니다. Enter는 전송, Shift+Enter는 줄바꿈입니다. 한글 조합 중 Enter는 전송하지 않습니다. 강사는 메시지 메뉴에서 고정·삭제할 수 있습니다.
-4. 컨디션과 휴식 요청의 인원·비율이 약 2초마다 갱신됩니다. ‘다시 물어보기’는 새 투표를 만들고 이전 결과를 보존합니다.
-5. 투표 영역의 ‘새 투표 만들기’를 열어 응답 항목을 한 줄씩 2~5개 입력합니다. 이전 결과는 강의실 설정에서 볼 수 있습니다.
-6. 강의실 설정의 ‘오늘 강의 종료’ 후에는 새 채팅·투표 응답을 막고 기존 기록을 보여줍니다. 강사가 다시 시작할 수도 있습니다.
-7. 같은 참여 링크를 다음 날 열면 한국 시간 기준 새 날짜의 기록과 기본 투표가 생성됩니다. 한국 시간 자정부터 전날 채팅·투표·참여자 번호는 조회할 수 없으며, 첫 요청에서 저장 데이터도 새 날짜로 교체합니다.
-
-이름은 수집하지 않습니다. 중복 응답 방지는 서명된 브라우저 쿠키 기준이며, 다른 브라우저·시크릿 창·쿠키 삭제까지 동일한 사람으로 식별하지는 않습니다. 접속 수는 최근 45초 이내에 신호를 보낸 수강생 브라우저 수이고, 탭 여러 개는 하나로 집계합니다. 강사는 접속 수에서 제외됩니다. 숨겨진 탭·절전·네트워크 지연은 집계에 영향을 줄 수 있습니다.
-
-## GitHub · Vercel 배포
-
-Supabase 설정은 필요하지 않습니다. 강사 접속 코드는 서버에 반영되어 있습니다. 학생은 홈페이지에서 바로 채팅·투표에 참여합니다.
-
-1. GitHub 저장소를 Vercel에서 Import합니다. Node.js 24, Next.js, 빌드 `npm run build`, 설치 `npm ci`를 사용합니다.
-2. Vercel의 hjsyedu 프로젝트 → Storage → Create Database → Blob에서 **Private** 저장소를 만들고 이 프로젝트에 연결합니다. 지역은 서울(icn1)을 권장합니다.
-3. 연결하면 서버 전용 `BLOB_READ_WRITE_TOKEN` 환경변수가 자동 등록됩니다. Production에 연결한 후 Redeploy합니다. `LOCAL_PREVIEW`는 Vercel에 등록하지 않습니다.
-4. 강사는 홈페이지 ‘강사 관리’ 또는 `/host?room=HJSYAI`에서 접속 코드를 입력합니다. 기본 강의실 공유 링크는 홈페이지 `/`이며, 첨부된 참여 QR 원본은 `public/branding/participation-qr.png`에 보관합니다.
-
-| 환경변수 | 값 |
-|---|---|
-| `BLOB_READ_WRITE_TOKEN` | 비공개 Blob 연결 시 자동 등록되는 서버 전용 토큰 |
-| `HOST_PASSWORD` | 선택: 기본 강사 코드를 변경할 때만 지정 |
-| `SESSION_SECRET` | 선택: 별도 세션 서명 키, 32자 이상. 생략 시 Blob 토큰으로 서명 |
-| `SITE_URL` | 선택: 공유 이미지의 기준 공개 주소 |
-
-토큰은 서버에서만 사용하고 브라우저에 전달하지 않습니다. 비공개 파일은 서버 API를 통해 집계·메시지만 제공합니다. 익명 쿠키 식별자·참여자 매핑·투표 원본은 반환하지 않습니다. 인증 쿠키는 HttpOnly이며, 강사 권한은 서버에서 확인합니다. 클라이언트 소스맵은 생성하지 않습니다.
-
-날짜가 바뀌면 전날 메시지, 링크, 투표 결과, 접속 수와 익명 번호를 삭제하고 기본 투표 두 개로 시작합니다. 동일 날짜의 ‘다시 물어보기’ 결과는 그날까지만 남습니다. 서버 GET과 모든 변경 요청에서 날짜를 확인하고 오래된 데이터를 교체합니다. 켜 둔 화면도 새 날짜로 자동 전환합니다. 미접속 강의실은 하루 한 번 Vercel Cron으로 정리합니다(UTC 15:00 = 한국 자정). Hobby Cron 실행은 최대 약 1시간 늦을 수 있으나, 앱에서는 한국 자정부터 전날 데이터가 노출되지 않습니다.
-
-방 하나를 비공개 JSON으로 저장하며 원본 최신 읽기(`useCache: false`)와 ETag 조건부 쓰기(`ifMatch`)로 동시 응답 덮어쓰기를 방지합니다. 변경 충돌은 다시 읽고 재시도합니다. 모든 방문자가 같은 Vercel 저장소를 공유합니다. 임시 서버 메모리나 배포 파일에 채팅을 저장하지 않습니다.
-
-현재 구조는 소규모 강의용입니다. 화면은 2초마다 조회하며 서버는 같은 강의실 조회를 최대 2초간 공유합니다. 접속 신호는 서버 인스턴스별로 30초 동안 모아서 저장하고 채팅·투표 변경은 바로 저장합니다. 접속 수는 여러 서버를 거치면 최대 약 30초 늦게 반영될 수 있습니다. 조회·저장은 Vercel/Blob 사용량에 포함됩니다. Hobby Blob 한도는 월 조회 10,000회, 쓰기/목록 2,000회입니다. Hobby 무료 한도를 초과하면 서비스가 제한될 수 있습니다. 대규모 상시 사용에는 이벤트 기반 전달과 전용 실시간 저장소가 적합합니다.
-
-공식 문서: [비공개 Blob](https://vercel.com/docs/vercel-blob/private-storage), [최신 읽기](https://vercel.com/changelog/vercel-blob-now-supports-consistent-reads-on-private-storage), [Blob 사용량](https://vercel.com/docs/vercel-blob/usage-and-pricing), [Cron 제한](https://vercel.com/docs/cron-jobs/usage-and-pricing).
-
-## 확인
+`http://localhost:3010`에서 실제 Workers 런타임과 로컬 Durable Object를 사용합니다. 빌드 후 서버만 다시 실행하려면 `npm start`를 사용합니다. 화면 파일을 수정했다면 다시 `npm run build`를 실행하세요. 로컬 상태는 `.wrangler/`에 저장되며 운영 데이터와 분리됩니다.
 
 ```sh
 npm run typecheck
 npm test
-node scripts/verify-blob-store.mjs
 npm run build
-npm run start
+npm run test:worker
 ```
 
-`scripts/verify-browser.cjs`는 Playwright가 있는 환경에서 별도 강사·수강생 컨텍스트로 권한, 양방향 채팅, 한글 조합 Enter, 동시 투표, QR 공유, 키보드와 1440×900/390×844/320×568px 첫 화면 배치를 확인합니다. `PLAYWRIGHT_MODULE`과 필요하면 `BROWSER_EXECUTABLE`을 환경에 지정해서 실행할 수 있습니다. 검증용 강의실은 로컬 DB에 만들어지며 검증 결과와 화면은 `.local/`에 보관합니다. 실제 Vercel Blob 배포 검증은 연결 후 별도로 해야 합니다.
+`test:worker`는 배포 없이 로컬 런타임에서 50명의 WebSocket 연결, 동시 투표, 응답 개인정보 분리, 접속 수, 자동 ping, 실제 알람의 저장 데이터 삭제와 화면 전달, 로그인 유지·권한을 검사합니다. 테스트 전용 RPC는 로컬 테스트 번들에만 추가되며 배포 코드에는 포함하지 않습니다.
 
-Pretendard 글꼴 라이선스는 `public/fonts/Pretendard-LICENSE.txt`에 보관합니다.
+`scripts/verify-browser.cjs`는 Playwright로 강사·수강생 화면, 양방향 채팅, 한글 입력, 링크·고정, 투표·이전 결과, QR, 키보드와 1440×900 / 390×844 / 320×568 화면을 확인합니다. 실행 환경에 `PLAYWRIGHT_MODULE`, 필요하면 `BROWSER_EXECUTABLE`을 지정하세요. 검증 결과는 Git에서 제외된 `.local/`에 보관합니다.
+
+강사 코드를 나중에 바꾸려면 `npx wrangler secret put HOST_PASSWORD`를 실행하거나 Cloudflare Worker의 비밀 환경 변수에 `HOST_PASSWORD`를 등록합니다. 기본 코드는 Worker 서버 코드에서만 검사하고 브라우저 번들에는 포함하지 않습니다.

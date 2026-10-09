@@ -1,0 +1,115 @@
+import assert from 'node:assert/strict';
+import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
+
+// Test-only RPC methods are appended to a local bundle, never to the deployed Worker.
+const script = await readFile('.local/worker-build/index.js', 'utf8') + `
+export class TestBoard extends ClassBoard {
+  async seed(code, room) { await this.ctx.storage.put('room:' + code, JSON.parse(room)); }
+  async stored(code) { return JSON.stringify(await this.ctx.storage.get('room:' + code)); }
+  async triggerAlarm() { await this.ctx.storage.setAlarm(Date.now() + 30); }
+  async alarmTime() { return await this.ctx.storage.getAlarm(); }
+  async midnightAt(iso) { return nextMidnight(new Date(iso)); }
+}
+`;
+const options = convertV4MiniflareOptions({ name: 'hjsy-test', script, modules: true, compatibilityDate: '2026-10-09',
+  durableObjects: { CLASS_BOARD: { className: 'TestBoard', useSQLite: true } },
+  resourcePersistencePath: `.local/worker-test-${crypto.randomUUID()}`, cf: false });
+let mf = new Miniflare(options);
+const sockets = [];
+const origin = 'https://classroom.test';
+async function request(path, input, cookie, headers = {}) {
+  const response = await mf.dispatchFetch(origin + path, { method: input ? 'POST' : 'GET',
+    headers: { ...(input ? { 'content-type': 'application/json', origin } : {}), ...(cookie ? { cookie } : {}), ...headers },
+    ...(input ? { body: JSON.stringify(input) } : {}) });
+  return { response, data: await response.json(), cookie: response.headers.get('set-cookie')?.split(';')[0] };
+}
+async function connect(path, cookie) {
+  const response = await mf.dispatchFetch(origin + path + '/live', { headers: { upgrade: 'websocket', cookie, origin } });
+  assert.equal(response.status, 101);
+  const ws = response.webSocket; ws.accept(); sockets.push(ws);
+  const peer = { ws, latest: null, messages: [], pong: false };
+  ws.addEventListener('message', event => { if (event.data === 'pong') { peer.pong = true; return; } const value = JSON.parse(event.data); peer.messages.push(value); peer.latest = value.data; });
+  return peer;
+}
+async function until(fn, label) { for (let i = 0; i < 100; i++) { if (await fn()) return; await new Promise(resolve => setTimeout(resolve, 30)); } throw new Error(label); }
+try {
+  assert.equal((await request('/api/auth', { password: 'wrong' })).response.status, 401);
+  const login = await request('/api/auth', { password: '0423' }); assert.equal(login.response.status, 200);
+  const host = login.cookie;
+  assert.match(login.response.headers.get('set-cookie'), /HttpOnly.*SameSite=Strict.*Secure/);
+  assert.equal((await request('/api/auth', undefined, host)).data.host, true);
+  assert.equal((await request('/api/auth', undefined, host.slice(0, -2) + 'xx')).data.host, false);
+  assert.equal((await request('/api/rooms', { title: '위조 요청' }, host, { origin: 'https://other.test' })).response.status, 403);
+  assert.equal((await request('/api/rooms', { title: '권한 없음' })).response.status, 401);
+  const main = await Promise.all(Array.from({ length: 10 }, () => request('/api/rooms/HJSYAI', { type: 'join' })));
+  assert(main.every(result => result.data.code === 'HJSYAI'));
+  const code = (await request('/api/rooms', { title: '50명 동시 검증' }, host)).data.code;
+  const path = `/api/rooms/${code}`;
+  const teacher = await connect(path, host);
+  const students = [];
+  for (let i = 0; i < 50; i++) {
+    const joined = await request(path, { type: 'join' });
+    students.push({ cookie: joined.cookie, peer: await connect(path, joined.cookie) });
+  }
+  await until(() => teacher.latest?.online === 50, '50 connections did not appear');
+  const pollId = teacher.latest.polls[0].id;
+  const results = await Promise.all(students.map((student, i) => request(path, { type: 'vote', pollId, option: i % 3 }, student.cookie)));
+  assert(results.every(result => result.response.status === 200));
+  await until(() => students.every(student => student.peer.latest?.polls[0].total === 50), '50 votes did not broadcast');
+  assert.deepEqual(teacher.latest.polls[0].counts, [17, 17, 16]);
+  assert(students.every((student, i) => student.peer.latest.polls[0].myVote === i % 3));
+  assert.equal(teacher.latest.polls[0].myVote, null);
+  assert(!JSON.stringify(teacher.latest).includes('votes'));
+  await request(path, { type: 'message', text: '수강생의 실시간 질문', author: 'host' }, students[0].cookie);
+  await until(() => teacher.latest?.messages.length === 1 && students[1].peer.latest?.messages.length === 1, 'Chat did not broadcast');
+  assert.equal(students[0].peer.latest.messages[0].mine, true);
+  assert.equal(students[1].peer.latest.messages[0].mine, false);
+  assert.equal(teacher.latest.messages[0].author, 'student');
+  assert(!JSON.stringify(teacher.latest).includes('authorId'));
+  assert.equal((await request(path, { type: 'delete', id: teacher.latest.messages[0].id }, students[0].cookie)).response.status, 401);
+  const duplicate = await connect(path, students[0].cookie);
+  await until(() => duplicate.latest?.online === 50, 'Duplicate tab count is wrong');
+  duplicate.ws.send('ping'); await until(() => duplicate.pong, 'Automatic hibernation ping response missing');
+  duplicate.ws.close(1000); students[0].peer.ws.close(1000);
+  await until(() => teacher.latest?.online === 49, 'Disconnected participant remained online');
+  await request(path, { type: 'poll-reset', id: pollId }, host);
+  await until(() => teacher.latest?.polls[0].archived, 'Archived poll missing');
+  assert.equal(teacher.latest.polls[0].total, 50);
+
+  await mf.unsafeEvictDurableObject('hjsy-test', 'TestBoard', { name: 'hjsy-class-board', webSockets: 'hibernate' });
+  await request(path, { type: 'message', text: '휴면 후에도 연결 유지' }, host);
+  await until(() => students[1].peer.latest?.messages.length === 2, 'Hibernated sockets did not resume');
+  assert.equal((await request('/api/auth', undefined, host)).data.host, true);
+
+  const ns = await mf.getDurableObjectNamespace('CLASS_BOARD'); const stub = ns.getByName('hjsy-class-board');
+  const stored = async code => JSON.parse(await stub.stored(code));
+  assert.equal(await stub.midnightAt('2026-10-09T14:59:59Z'), Date.parse('2026-10-09T15:00:00Z'));
+  assert.equal(await stub.midnightAt('2026-10-09T15:00:00Z'), Date.parse('2026-10-10T15:00:00Z'));
+  const old = await stored(code); const oldDay = Object.values(old.days)[0];
+  oldDay.date = '2020-01-01'; old.days = { '2020-01-01': oldDay };
+  await stub.seed(code, JSON.stringify(old));
+  await stub.triggerAlarm();
+  await until(async () => !(await stored(code)).days['2020-01-01'], 'Alarm did not remove the previous day');
+  await until(() => students[1].peer.latest?.messages.length === 0 && students[1].peer.latest?.polls[0].total === 0, 'Daily reset did not reach an open socket');
+  const clean = await stored(code); assert.deepEqual(Object.keys(clean.days), [teacher.latest.today]);
+  assert.equal(Object.values(clean.days)[0].participants, undefined);
+  assert((await stub.alarmTime()) > Date.now());
+  await stub.seed('OLD123', JSON.stringify({ ...old, code: 'OLD123' }));
+  const fresh = await request('/api/rooms/OLD123?date=2020-01-01');
+  assert.equal(fresh.data.messages.length, 0); assert.equal(fresh.data.polls[0].total, 0);
+  assert(!(await stored('OLD123')).days['2020-01-01']);
+  assert.equal((await request(path, { type: 'message', date: '2020-01-01', text: '오래된 화면' }, host)).response.status, 409);
+
+  for (const ws of sockets) if (ws.readyState === 1) ws.close(1000);
+  await new Promise(resolve => setTimeout(resolve, 100)); await mf.dispose();
+  mf = new Miniflare(options);
+  assert.equal((await request('/api/auth', undefined, host)).data.host, true, 'Signed session must survive runtime restart');
+  assert.equal((await request(path)).data.polls[0].total, 0);
+  for (let i = 0; i < 8; i++) assert.equal((await request('/api/auth', { password: 'wrong' }, undefined, { 'cf-connecting-ip': '198.51.100.7' })).response.status, 401);
+  assert.equal((await request('/api/auth', { password: '0423' }, undefined, { 'cf-connecting-ip': '198.51.100.7' })).response.status, 429);
+  await mkdir('.local', { recursive: true });
+  await writeFile('.local/worker-verification.json', JSON.stringify({ passed: true, concurrentStudents: 50,
+    checks: ['signed instructor and guest cookies', 'CSRF rejection', 'host-only moderation', '50 WebSocket clients and concurrent votes', 'per-viewer privacy', 'duplicate tabs and disconnect counts', 'hibernation ping and eviction recovery', 'poll archive', 'Seoul midnight scheduling', 'real alarm clears persisted data and broadcasts', 'stale-day reads expire data', 'session survives runtime restart', 'login attempt limit'] }, null, 2));
+  console.log('PASS: 50 real-time clients, concurrent votes, privacy, signed auth, actual daily alarm, persistence and restart.');
+} finally { await mf.dispose(); }

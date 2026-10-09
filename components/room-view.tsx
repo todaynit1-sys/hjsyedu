@@ -1,5 +1,3 @@
-'use client';
-import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, Check, Copy, ExternalLink, Link2, LogOut, MessageCircle, MoreHorizontal, Pin, Plus, QrCode, Send, Settings2, Trash2, Users, WifiOff, X } from 'lucide-react';
 import { Brand } from './brand';
@@ -52,11 +50,38 @@ export function RoomView({ code, host, onBack, onLogout }: { code: string; host:
   useEffect(() => () => { if (noticeTimer.current) clearTimeout(noticeTimer.current); }, []);
   useEffect(() => { let stopped = false; api<Snapshot>(`/api/rooms/${code}`, { type: host ? 'start-day' : 'join' }).then(value => { if (!stopped) { setData(value); setDate(value.date); setError(''); } }).catch(e => { if (!stopped) setError(e.message); }); return () => { stopped = true; }; }, [code, host]);
   useEffect(() => {
-    if (!date) return; let stopped = false; let inflight = false;
-    async function refresh() { if (inflight || document.hidden) return; inflight = true; try { const value = await api<Snapshot>(`/api/rooms/${code}`); if (!stopped) { setData(value); if (value.date !== date) { setDate(value.date); setHistory(false); notify('새 날짜로 시작했어요. 채팅과 투표가 초기화됐습니다.'); } setConnected(true); setError(''); } } catch (e) { if (!stopped) { setConnected(false); setError((e as Error).message); } } finally { inflight = false; } }
-    refresh(); const timer = setInterval(refresh, 2000); document.addEventListener('visibilitychange', refresh); return () => { stopped = true; clearInterval(timer); document.removeEventListener('visibilitychange', refresh); };
-  }, [code, date]);
-  useEffect(() => { if (host || !data || data.date !== data.today || !data.active) return; const timer = setInterval(() => { if (!document.hidden) api(`/api/rooms/${code}`, { type: 'heartbeat' }).catch(() => {}); }, 15_000); return () => clearInterval(timer); }, [host, code, data?.date, data?.today, data?.active]);
+    if (!date) return;
+    let stopped = false; let socket: WebSocket | null = null; let retry = 0; let lastSignal = Date.now();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let ping: ReturnType<typeof setInterval> | undefined;
+    function connect() {
+      if (stopped) return;
+      const url = new URL(`/api/rooms/${code}/live`, window.location.href);
+      url.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      socket = new WebSocket(url);
+      socket.onopen = () => { retry = 0; lastSignal = Date.now(); setConnected(true); setError(''); ping = setInterval(() => { if (Date.now() - lastSignal > 70_000) socket?.close(); else if (socket?.readyState === WebSocket.OPEN) socket.send('ping'); }, 30_000); };
+      socket.onmessage = event => {
+        lastSignal = Date.now();
+        if (event.data === 'pong') return;
+        try { const update = JSON.parse(event.data); if (update.type !== 'snapshot') return;
+          const value = update.data as Snapshot; setData(value); setDate(value.date);
+          if (value.date !== date) { setHistory(false); notify('새 날짜로 시작했어요. 채팅과 투표가 초기화됐습니다.'); }
+        } catch { /* A later snapshot can recover a malformed update. */ }
+      };
+      socket.onclose = () => {
+        if (ping) clearInterval(ping);
+        if (stopped) return;
+        setConnected(false); setError('연결이 끊어져 다시 연결하고 있어요.');
+        timer = setTimeout(() => {
+          api<Snapshot>(`/api/rooms/${code}`, { type: host ? 'start-day' : 'join' }).then(connect).catch(() => { if (!stopped) connect(); });
+        }, Math.min(10_000, 500 * 2 ** retry++) + Math.random() * 250);
+      };
+      socket.onerror = () => socket?.close();
+    }
+    function refresh() { if (!document.hidden && socket?.readyState === WebSocket.OPEN) socket.send('refresh'); }
+    connect(); document.addEventListener('visibilitychange', refresh);
+    return () => { stopped = true; clearTimeout(timer); clearInterval(ping); document.removeEventListener('visibilitychange', refresh); socket?.close(); };
+  }, [code, date, host]);
   const action = useCallback(async (input: Record<string, unknown>, success: string) => { setBusy(true); try { const value = await api<Snapshot>(`/api/rooms/${code}`, { ...input, date }); if (input.type === 'message') forceBottom.current = true; setData(value); setConnected(true); setError(''); notify(success); } catch (e) { setError((e as Error).message); throw e; } finally { setBusy(false); } }, [code, date]);
   const safeAction = useCallback(async (input: Record<string, unknown>, success: string) => { try { await action(input, success); } catch { /* visible room error */ } }, [action]);
   const messages = data?.messages.filter(m => tab === 'all' || m.url || /https?:\/\//.test(m.text)) ?? []; const lastId = messages.at(-1)?.id;
@@ -64,9 +89,9 @@ export function RoomView({ code, host, onBack, onLogout }: { code: string; host:
   useEffect(() => { nearBottom.current = true; setUnread(false); }, [date, tab]);
   useEffect(() => { if (nearBottom.current || forceBottom.current) { scrollLatest(); forceBottom.current = false; } else setUnread(true); }, [lastId, date, tab]);
   const pinned = data?.messages.find(m => m.pinned); const editable = Boolean(data && data.date === data.today); const active = Boolean(data?.active && editable && connected);
-  return <div className="live-room"><a className="skip-link" href="#main">본문으로 건너뛰기</a><header className="live-header"><Brand /><div className="live-header-actions">{host ? <span className="live-role">강사</span> : <Link className="live-host-link" href={`/host?room=${code}`} aria-label="강사 로그인">강사 관리</Link>}{host && onLogout && <button className="icon-button" aria-label="로그아웃" onClick={() => onLogout().catch(e => setError(e.message))}><LogOut size={18} /></button>}<button className="live-share" onClick={() => setShare(true)}><QrCode size={18} /><span>참여 링크</span></button></div></header>
-    {!data ? <main id="main" className="live-loading"><img src="/branding/hjsy-mark-corporate.svg" width="64" height="64" alt="" /><h1>{error ? '강의실에 연결하지 못했어요.' : '강의실을 열고 있어요.'}</h1>{error ? <><p role="alert">{error}</p><button className="primary" onClick={() => window.location.reload()}>다시 연결</button><Link href="/join">다른 강의실 참여</Link></> : <p role="status">채팅과 투표를 준비하고 있어요.</p>}</main> : <>
-      <section className="live-title"><div className="live-title-copy"><span className="live-kicker"><span className={connected && data.active ? 'signal-dot' : 'signal-dot offline'} />{!connected ? '연결 확인 중' : data.active ? 'LIVE CLASS' : editable ? '강의 종료' : '지난 강의'}<span className="live-code">{code}</span>{data.mode === 'local' && <span className="local-label">{data.demo ? '미리보기' : '로컬'}</span>}</span><h1>{data.title}</h1></div><div className="live-room-actions"><span className="live-online"><Users size={16} /><b>{data.online}</b><span>접속 중</span></span><details className="room-settings"><summary aria-label="강의실 설정"><Settings2 size={20} /></summary><div className="settings-panel"><p className="daily-retention">오늘 {dateLabel(data.date)}<br />채팅과 투표는 한국 시간 자정에 초기화됩니다.</p>{data.polls.some(p => p.archived) && <button aria-pressed={history} onClick={() => setHistory(!history)}>{history ? '현재 투표 보기' : '이전 투표 결과 보기'}</button>}<p>채팅과 투표는 2초마다 갱신돼요.</p>{data.mode === 'local' && <p>현재 로컬 미리보기입니다. 예시 메시지 외의 채팅·응답 수는 실제 참여로 집계됩니다.</p>}{host && editable && <button disabled={busy} onClick={() => safeAction({ type: 'active', active: !data.active }, data.active ? '오늘 강의를 종료했어요.' : '강의를 다시 시작했어요.')}>{data.active ? '오늘 강의 종료' : '강의 다시 시작'}</button>}{host && onBack ? <button onClick={onBack}><ArrowLeft size={15} />내 강의실 목록</button> : <Link href="/join"><ArrowLeft size={15} />다른 강의실 참여</Link>}</div></details></div></section>
+  return <div className="live-room"><a className="skip-link" href="#main">본문으로 건너뛰기</a><header className="live-header"><Brand /><div className="live-header-actions">{host ? <span className="live-role">강사</span> : <a className="live-host-link" href={`/host?room=${code}`} aria-label="강사 로그인">강사 관리</a>}{host && onLogout && <button className="icon-button" aria-label="로그아웃" onClick={() => onLogout().catch(e => setError(e.message))}><LogOut size={18} /></button>}<button className="live-share" onClick={() => setShare(true)}><QrCode size={18} /><span>참여 링크</span></button></div></header>
+    {!data ? <main id="main" className="live-loading"><img src="/branding/hjsy-mark-corporate.svg" width="64" height="64" alt="" /><h1>{error ? '강의실에 연결하지 못했어요.' : '강의실을 열고 있어요.'}</h1>{error ? <><p role="alert">{error}</p><button className="primary" onClick={() => window.location.reload()}>다시 연결</button><a href="/join">다른 강의실 참여</a></> : <p role="status">채팅과 투표를 준비하고 있어요.</p>}</main> : <>
+      <section className="live-title"><div className="live-title-copy"><span className="live-kicker"><span className={connected && data.active ? 'signal-dot' : 'signal-dot offline'} />{!connected ? '연결 확인 중' : data.active ? 'LIVE CLASS' : editable ? '강의 종료' : '지난 강의'}<span className="live-code">{code}</span>{data.mode === 'local' && <span className="local-label">{data.demo ? '미리보기' : '로컬'}</span>}</span><h1>{data.title}</h1></div><div className="live-room-actions"><span className="live-online"><Users size={16} /><b>{data.online}</b><span>접속 중</span></span><details className="room-settings"><summary aria-label="강의실 설정"><Settings2 size={20} /></summary><div className="settings-panel"><p className="daily-retention">오늘 {dateLabel(data.date)}<br />채팅과 투표는 한국 시간 자정에 초기화됩니다.</p>{data.polls.some(p => p.archived) && <button aria-pressed={history} onClick={() => setHistory(!history)}>{history ? '현재 투표 보기' : '이전 투표 결과 보기'}</button>}<p>채팅과 투표 결과가 실시간으로 반영돼요.</p>{data.mode === 'local' && <p>현재 로컬 미리보기입니다. 예시 메시지 외의 채팅·응답 수는 실제 참여로 집계됩니다.</p>}{host && editable && <button disabled={busy} onClick={() => safeAction({ type: 'active', active: !data.active }, data.active ? '오늘 강의를 종료했어요.' : '강의를 다시 시작했어요.')}>{data.active ? '오늘 강의 종료' : '강의 다시 시작'}</button>}{host && onBack ? <button onClick={onBack}><ArrowLeft size={15} />내 강의실 목록</button> : <a href="/join"><ArrowLeft size={15} />다른 강의실 참여</a>}</div></details></div></section>
       {error && <div className="live-error" role="alert"><WifiOff size={17} /><span>{error}</span><button aria-label="오류 메시지 닫기" onClick={() => setError('')}><X size={16} /></button></div>}
       <main id="main" className="live-workspace"><aside className="live-polls" aria-labelledby="polls-title"><div className="live-polls-heading"><h2 id="polls-title">실시간 투표</h2><span>{host ? '수강생 응답을 확인하세요' : '선택하면 바로 집계됩니다'}</span>{host && active && <button className="icon-button" onClick={() => setQuestions(true)} aria-label="새 투표 만들기"><Plus size={17} /></button>}</div><div className="live-poll-scroll">{data.polls.filter(p => history ? p.archived : !p.archived).map(poll => <PollCard key={poll.id} poll={poll} host={host && !history} active={active && !history} busy={busy} onAction={safeAction} />)}{history && !data.polls.some(p => p.archived) && <p className="poll-empty">이전 투표 결과가 아직 없어요.</p>}</div><div className="live-poll-note"><span>이름 없이 집계 · 응답 변경 가능</span>{data.polls.some(p => p.archived) && <button aria-pressed={history} onClick={() => setHistory(!history)}>{history ? '현재 투표' : '이전 결과'}</button>}</div></aside>
         <section className="live-chat" aria-labelledby="chat-title"><div className="live-chat-heading"><h2 id="chat-title"><MessageCircle size={20} />실시간 채팅</h2><div className="chat-filters" role="group" aria-label="채팅 필터"><button className={tab === 'all' ? 'selected' : ''} aria-pressed={tab === 'all'} onClick={() => setTab('all')}>전체</button><button className={tab === 'links' ? 'selected' : ''} aria-pressed={tab === 'links'} onClick={() => setTab('links')}><Link2 size={14} />링크</button></div></div>

@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+const randomUUID = () => crypto.randomUUID();
 import type { Day, Poll, PollKind, Room, Snapshot } from './types.ts';
 
 export class AppError extends Error {
@@ -23,7 +23,7 @@ export function ensureDay(room: Room, date = today()): Day {
 }
 export function newRoom(title: string, demo = false): Room {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const bytes = randomBytes(6);
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
   const room: Room = { code: Array.from(bytes, b => alphabet[b % alphabet.length]).join(''), title, demo, createdAt: new Date().toISOString(), days: {} };
   ensureDay(room);
   return room;

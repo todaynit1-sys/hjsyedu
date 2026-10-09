@@ -1,4 +1,3 @@
-'use client';
 import { Check, ChevronDown, Coffee, Meh, Plus, RotateCcw, Smile, Sparkles, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { PublicPoll } from '../lib/types';
