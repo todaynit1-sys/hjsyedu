@@ -226,6 +226,12 @@ input::placeholder,textarea::placeholder{color:#778599}
 
 /* Mobile: keep both quick polls usable while reserving most of the screen for chat. */
 @media(max-width:760px){
+  .live-room .live-polls-heading{margin:0 0 4px;gap:4px;padding:0;min-height:28px}
+  .live-polls-heading>span{display:none}
+  .live-poll-actions{gap:4px}
+  .survey-link{min-height:28px;padding:3px 6px;gap:4px}
+  .survey-link svg{width:13px;height:13px}
+  .live-poll-actions .icon-button{min-width:28px;min-height:28px;width:28px;height:28px}
   .live-poll-scroll{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:6px;max-height:136px}
   .compact-poll,.compact-poll.poll-break,.compact-poll.poll-custom{min-height:0;padding:8px 6px 6px}
   .compact-poll-top,.compact-poll.poll-break .compact-poll-top{color:#526175;margin-bottom:7px;font-size:11px}

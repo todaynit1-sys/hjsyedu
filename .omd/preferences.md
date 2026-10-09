@@ -1,0 +1,21 @@
+---
+schema: omd.preferences/v1
+design_md_hash_at_creation:
+---
+
+# Preference Log
+
+## 2026-10-09T12:11:30.506Z — compact-mobile-spacing-for-chat
+
+```omd-meta
+id: pref_mv0xcvgr_4039e201
+timestamp: 2026-10-09T12:11:30.506Z
+scope: spacing
+signal: user-correction
+confidence: explicit
+status: pending
+source_agent: codex
+source_context: "app/corporate.css; components/room-view.tsx; components/poll-card.tsx"
+```
+
+Keep mobile poll and survey spacing compact and remove redundant voting guidance to prioritize chat space.
