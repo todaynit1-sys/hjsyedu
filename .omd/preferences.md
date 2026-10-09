@@ -19,3 +19,18 @@ source_context: "app/corporate.css; components/room-view.tsx; components/poll-ca
 ```
 
 Keep mobile poll and survey spacing compact and remove redundant voting guidance to prioritize chat space.
+
+## 2026-10-09T12:21:15.760Z — survey-in-header-and-hidden-teacher-entry
+
+```omd-meta
+id: pref_mv0xpf1t_3e604775
+timestamp: 2026-10-09T12:21:15.760Z
+scope: components.navigation
+signal: user-correction
+confidence: explicit
+status: pending
+source_agent: codex
+source_context: "components/brand.tsx; components/room-view.tsx; components/entry.tsx"
+```
+
+Use the header for the course survey, remove the visible live-poll title, and reveal teacher sign-in only after five consecutive symbol taps.

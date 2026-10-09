@@ -29,6 +29,10 @@ input,textarea{border-color:#cfd7e2;border-radius:8px}
 input::placeholder,textarea::placeholder{color:#778599}
 .primary{border-radius:8px;font-weight:650}
 .brand{gap:10px}
+.brand-access{display:flex;align-items:center;justify-content:center;flex:none;min-height:44px;padding:0}
+.brand-home{display:inline-flex;align-items:center;min-height:44px}
+.host-access-dialog form{margin-top:20px;text-align:left}
+.host-access-dialog input{font-size:16px;color:var(--ink)}
 .brand-mark{width:34px;height:34px}
 .brand-wordmark{font-size:23px;letter-spacing:-.65px;font-weight:780;color:#1e293b}
 .brand-wordmark>span{color:#4656a5;font-size:19px}
@@ -184,7 +188,7 @@ input::placeholder,textarea::placeholder{color:#778599}
   .live-chat-heading{padding-top:3px;padding-bottom:3px}
 }
 
-/* Keep the course survey beside quick polls, including on short mobile screens. */
+/* Teacher controls stay beside polls; the course survey lives in the header. */
 .live-room .live-polls-heading{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;padding-right:4px;min-height:0}
 .live-polls-heading h2{grid-column:1;grid-row:1}
 .live-polls-heading>span{grid-column:1/-1;grid-row:2;width:auto}
