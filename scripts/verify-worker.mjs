@@ -82,6 +82,26 @@ try {
   await until(() => students[1].peer.latest?.messages.length === 2, 'Hibernated sockets did not resume');
   assert.equal((await request('/api/auth', undefined, host)).data.host, true);
 
+  for (const target of ['chat', 'mood', 'break']) assert.equal((await request(path, { type: 'room-reset', target }, students[1].cookie)).response.status, 401);
+  const breakId = teacher.latest.polls.find(p => p.kind === 'break').id;
+  await request(path, { type: 'vote', pollId: breakId, option: 1 }, students[1].cookie);
+  await request(path, { type: 'pin', id: teacher.latest.messages[0].id }, host);
+  assert.equal((await request(path, { type: 'room-reset', target: 'chat' }, host)).response.status, 200);
+  await until(() => students[1].peer.latest?.messages.length === 0, 'Chat reset did not broadcast');
+  assert.equal(students[1].peer.latest.polls.find(p => p.kind === 'break').total, 1);
+  assert.equal((await request(path, { type: 'room-reset', target: 'mood' }, host)).response.status, 200);
+  await until(() => students.every((student, i) => i === 0 || (student.peer.latest?.polls.filter(p => p.kind === 'mood').length === 1 && student.peer.latest.polls.find(p => p.kind === 'mood').total === 0)), 'Mood reset did not reach all connected students');
+  const cleanMood = students[1].peer.latest.polls.find(p => p.kind === 'mood');
+  assert.equal(cleanMood.myVote, null); assert.notEqual(cleanMood.id, pollId);
+  assert.equal((await request(path, { type: 'vote', pollId, option: 0 }, students[1].cookie)).response.status, 409);
+  await request(path, { type: 'vote', pollId: cleanMood.id, option: 2 }, students[1].cookie);
+  await request(path, { type: 'message', text: '초기화 후에도 채팅 가능' }, students[1].cookie);
+  assert.equal((await request(path, { type: 'room-reset', target: 'break' }, host)).response.status, 200);
+  await until(() => students[1].peer.latest?.polls.find(p => p.kind === 'break').total === 0, 'Break reset did not broadcast');
+  assert.equal(students[1].peer.latest.polls.find(p => p.kind === 'break').myVote, null);
+  assert.equal(students[1].peer.latest.polls.find(p => p.kind === 'mood').total, 1);
+  assert.equal(students[1].peer.latest.messages.length, 1); assert.equal(students[1].peer.latest.online, 49);
+
   const ns = await mf.getDurableObjectNamespace('CLASS_BOARD'); const stub = ns.getByName('hjsy-class-board');
   const stored = async code => JSON.parse(await stub.stored(code));
   assert.equal(await stub.midnightAt('2026-10-09T14:59:59Z'), Date.parse('2026-10-09T15:00:00Z'));
@@ -110,6 +130,6 @@ try {
   assert.equal((await request('/api/auth', { password: '0423' }, undefined, { 'cf-connecting-ip': '198.51.100.7' })).response.status, 429);
   await mkdir('.local', { recursive: true });
   await writeFile('.local/worker-verification.json', JSON.stringify({ passed: true, concurrentStudents: 50,
-    checks: ['signed instructor and guest cookies', 'CSRF rejection', 'host-only moderation', '50 WebSocket clients and concurrent votes', 'per-viewer privacy', 'duplicate tabs and disconnect counts', 'hibernation ping and eviction recovery', 'poll archive', 'Seoul midnight scheduling', 'real alarm clears persisted data and broadcasts', 'stale-day reads expire data', 'session survives runtime restart', 'login attempt limit'] }, null, 2));
+    checks: ['signed instructor and guest cookies', 'CSRF rejection', 'host-only moderation', '50 WebSocket clients and concurrent votes', 'per-viewer privacy', 'duplicate tabs and disconnect counts', 'hibernation ping and eviction recovery', 'poll archive', 'host-only chat/mood/break resets broadcast and preserve other data', 'stale votes rejected after reset', 'Seoul midnight scheduling', 'real alarm clears persisted data and broadcasts', 'stale-day reads expire data', 'session survives runtime restart', 'login attempt limit'] }, null, 2));
   console.log('PASS: 50 real-time clients, concurrent votes, privacy, signed auth, actual daily alarm, persistence and restart.');
 } finally { await mf.dispose(); }

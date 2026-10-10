@@ -75,3 +75,46 @@ test('presence deduplicates browser tabs and expires after 45 seconds', () => {
   day.presence.old = Date.now() - 46_000;
   assert.equal(snapshot(room, today(), null, 'local').online, 1);
 });
+test('chat reset clears messages and pins while preserving votes, aliases and presence', () => {
+  const room = newRoom('수업'); const day = ensureDay(room);
+  mutate(room, { type: 'message', text: '질문' }, 'guest', false);
+  mutate(room, { type: 'pin', id: day.messages[0].id }, null, true);
+  mutate(room, { type: 'vote', pollId: day.polls[0].id, option: 1 }, 'guest', false);
+  mutate(room, { type: 'heartbeat' }, 'guest', false);
+  const polls = structuredClone(day.polls); const presence = structuredClone(day.presence);
+  mutate(room, { type: 'room-reset', target: 'chat' }, null, true);
+  assert.deepEqual(day.messages, []); assert.deepEqual(day.polls, polls); assert.deepEqual(day.presence, presence);
+  assert.equal(day.participants?.guest, '수강생 01'); assert.equal(day.active, true);
+  mutate(room, { type: 'message', text: '초기화 후 질문' }, 'guest', false);
+  assert.equal(day.messages[0].authorName, '수강생 01');
+});
+test('poll reset removes only its kind including history and rejects stale votes', () => {
+  for (const kind of ['mood', 'break'] as const) {
+    const room = newRoom('수업'); const day = ensureDay(room);
+    const initial = day.polls.find(p => p.kind === kind)!; const other = day.polls.find(p => p.kind !== kind)!;
+    mutate(room, { type: 'vote', pollId: initial.id, option: 0 }, 'guest', false);
+    mutate(room, { type: 'vote', pollId: other.id, option: 1 }, 'guest', false);
+    mutate(room, { type: 'poll-reset', id: initial.id }, null, true);
+    const current = day.polls.find(p => p.kind === kind && !p.archived)!;
+    mutate(room, { type: 'vote', pollId: current.id, option: 1 }, 'guest', false);
+    mutate(room, { type: 'message', text: '남겨둘 채팅' }, 'guest', false);
+    mutate(room, { type: 'room-reset', target: kind }, null, true);
+    const clean = day.polls.find(p => p.kind === kind)!;
+    assert.equal(day.polls.filter(p => p.kind === kind).length, 1);
+    assert.notEqual(clean.id, current.id); assert.deepEqual(clean.options, current.options);
+    assert.equal(clean.question, current.question); assert.equal(clean.open, true); assert.equal(clean.archived, false);
+    assert.deepEqual(clean.votes, {}); assert.equal(other.votes.guest, 1); assert.equal(day.messages[0].text, '남겨둘 채팅');
+    assert.equal(snapshot(room, today(), 'guest', 'local').polls.find(p => p.id === clean.id)?.myVote, null);
+    assert.throws(() => mutate(room, { type: 'vote', pollId: current.id, option: 0 }, 'guest', false), /마감/);
+    mutate(room, { type: 'vote', pollId: clean.id, option: 0 }, 'guest', false);
+    assert.equal(clean.votes.guest, 0);
+  }
+});
+test('reset requires host, validates targets and cannot clear a new day from a stale screen', () => {
+  const room = newRoom('수업'); mutate(room, { type: 'message', text: '보존' }, 'guest', false);
+  const before = structuredClone(room);
+  for (const target of ['chat', 'mood', 'break']) assert.throws(() => mutate(room, { type: 'room-reset', target }, 'guest', false), /강사 로그인/);
+  assert.throws(() => mutate(room, { type: 'room-reset', target: 'all' }, null, true), /항목/);
+  assert.throws(() => mutate(room, { type: 'room-reset', target: 'chat', date: '2020-01-01' }, null, true), /지난 강의/);
+  assert.deepEqual(room, before);
+});

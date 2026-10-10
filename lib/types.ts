@@ -1,4 +1,5 @@
 export const MAIN_ROOM_CODE = 'HJSYAI';
+export type ResetTarget = 'chat' | 'mood' | 'break';
 export type PollKind = 'mood' | 'break' | 'custom';
 export type Message = { id: string; text: string; url: string | null; createdAt: string; pinned: boolean; author?: 'host' | 'student'; authorName?: string; authorId?: string };
 export type PublicMessage = Omit<Message, 'authorId'> & { mine: boolean };

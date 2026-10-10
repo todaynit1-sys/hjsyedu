@@ -94,6 +94,18 @@ export function mutate(room: Room, action: Record<string, unknown>, guest: strin
   }
   if (!host) throw new AppError('강사 로그인이 필요합니다.', 401);
   switch (action.type) {
+    case 'room-reset': {
+      if (action.target === 'chat') { day.messages = []; break; }
+      if (action.target !== 'mood' && action.target !== 'break') throw new AppError('초기화할 항목을 확인해주세요.');
+      const kind = action.target;
+      const current = day.polls.find(p => p.kind === kind && !p.archived);
+      const replacement = newPoll(kind, current?.question, current ? [...current.options] : undefined);
+      const position = day.polls.findIndex(p => p.kind === kind);
+      // A new ID rejects delayed votes for the previous round. Only this kind is cleared.
+      day.polls = day.polls.filter(p => p.kind !== kind);
+      day.polls.splice(position < 0 ? day.polls.length : Math.min(position, day.polls.length), 0, replacement);
+      break;
+    }
     case 'pin': {
       const message = day.messages.find(m => m.id === action.id);
       if (!message) throw new AppError('게시물을 찾을 수 없습니다.', 404);
