@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { ArrowRight, ArrowUpRight, ClipboardList } from 'lucide-react';
 import { Brand } from './brand';
+import { ContactLink } from './contact-link';
 import { api } from '../lib/client';
 import { SURVEY_URL } from '../lib/survey';
 export function Entry({ preview }: { preview: boolean }) {
@@ -22,6 +23,6 @@ export function Entry({ preview }: { preview: boolean }) {
         {preview && <a className="demo-link" href="/room/DEMO26">강의실 미리 둘러보기 <ArrowUpRight size={16} /></a>}
       </section>
       <section className="entry-art" aria-label="HJSY AI Edu 실시간 강의실"><img src="/branding/hjsy-logo-ai-edu-v1.png" width={1536} height={1024} alt="HJSY AI Edu · AI 칩 로고" /></section>
-    </main><footer className="entry-footer"><span>HJSY AI Edu</span><span>채팅 · 자료 공유 · 실시간 투표</span></footer>
+    </main><footer className="entry-footer"><span>HJSY AI Edu</span><span>채팅 · 자료 공유 · 실시간 투표</span><ContactLink /></footer>
   </div>;
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, Check, ClipboardList, Copy, ExternalLink, FileSpreadsheet, Link2, LogOut, MessageCircle, MoreHorizontal, Pin, Plus, QrCode, Send, Settings2, Trash2, Users, WifiOff, X } from 'lucide-react';
 import { Brand } from './brand';
+import { ContactLink } from './contact-link';
 import { PollCard, NewPoll } from './poll-card';
 import { ShareDialog } from './share-dialog';
 import { api, dateLabel, timeLabel } from '../lib/client';
@@ -35,7 +36,7 @@ function Composer({ busy, active, onAction }: { busy: boolean; active: boolean; 
   return <form className="chat-composer" onSubmit={send}>
     {link && <div className="chat-url"><Link2 size={16} /><label className="sr-only" htmlFor="message-url">링크 주소</label><input id="message-url" ref={urlRef} type="url" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://" maxLength={2048} disabled={!active} /><button className="icon-button" type="button" onClick={() => setLink(false)} aria-label="링크 첨부 닫기"><X size={17} /></button></div>}
     <div className="chat-input-row"><button className={`attach-button ${link ? 'selected' : ''}`} type="button" onClick={() => setLink(!link)} aria-label="링크 첨부" aria-pressed={link} disabled={!active}><Link2 size={20} /></button><label htmlFor="message-text" className="sr-only">채팅 메시지</label><textarea id="message-text" ref={textRef} value={text} onChange={e => setText(e.target.value)} placeholder={active ? '메시지나 질문을 입력하세요.' : '지금은 채팅을 보낼 수 없어요.'} maxLength={2000} rows={1} disabled={!active} aria-invalid={Boolean(error)} aria-describedby={error ? 'composer-error' : undefined} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }} /><button className="chat-send" type="submit" disabled={busy || !active} aria-label={busy ? '메시지 보내는 중' : '메시지 보내기'}><Send size={19} /></button></div>
-    <div className="composer-hint"><span>{active ? 'Enter 전송 · Shift + Enter 줄바꿈' : '강사가 강의를 다시 시작하면 참여할 수 있어요.'}</span><span>{text.length}/2000</span></div>{error && <p className="error" role="alert" id="composer-error">{error}</p>}
+    <div className="composer-hint"><span className="composer-instructions">{active ? 'Enter 전송 · Shift + Enter 줄바꿈' : '강사가 강의를 다시 시작하면 참여할 수 있어요.'}</span><div className="composer-meta"><ContactLink /><span>{text.length}/2000</span></div></div>{error && <p className="error" role="alert" id="composer-error">{error}</p>}
   </form>;
 }
 function QuestionDialog({ busy, onAction, onClose }: { busy: boolean; onAction: (input: Record<string, unknown>, success: string) => Promise<void>; onClose: () => void }) {

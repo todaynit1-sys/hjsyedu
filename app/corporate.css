@@ -111,6 +111,15 @@ input::placeholder,textarea::placeholder{color:#778599}
 .chat-send{background:#4656a5;border-radius:6px;box-shadow:none}
 .chat-send:hover:not(:disabled){background:#35458b}
 .composer-hint{color:#718096}
+.contact-link{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:48px;min-height:24px;color:#526175;font-size:11px;line-height:1.4;white-space:nowrap;border-radius:4px}
+.contact-link:hover{color:#35458b;text-decoration:underline;text-underline-offset:3px}
+.contact-link:focus-visible{outline:2px solid #4656a5;outline-offset:2px}
+.composer-hint{align-items:center}
+.composer-instructions{min-width:0}
+.composer-meta{display:flex;align-items:center;gap:10px;flex-shrink:0;margin-left:auto}
+.entry-footer{align-items:center}
+@media(max-width:760px){.entry-footer>span:nth-child(2){display:none}}
+@media(max-height:620px) and (max-width:760px){.composer-hint{display:flex;margin-top:2px}.composer-instructions{display:none}}
 .chat-url{color:#64748b}
 .chat-url input{border-color:#dbe2ed;border-radius:6px}
 .new-messages{background:#3f4e85;box-shadow:0 3px 10px #172b4d15;border-radius:6px}
