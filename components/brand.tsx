@@ -2,20 +2,21 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, X } from 'lucide-react';
 import { api } from '../lib/client';
 import { MAIN_ROOM_CODE } from '../lib/types';
+import { APP_NAME, BRAND_MARK } from '../lib/brand';
 
 export function Brand({ roomCode = MAIN_ROOM_CODE, hostAccess = true }: { roomCode?: string; hostAccess?: boolean }) {
   const taps = useRef({ count: 0, last: 0 });
   const [signIn, setSignIn] = useState(false);
-  const symbol = <img className="brand-mark" src="/branding/hjsy-ai-chip-v1.png" width="34" height="34" alt="HJSY AI Edu 로고" />;
-  const wordmark = <span className="brand-wordmark">HJSY <span>AI <em>Edu</em></span><small>실시간 강의실</small></span>;
+  const symbol = <img className="brand-mark" src={BRAND_MARK} width="34" height="34" alt={`${APP_NAME} 로고`} />;
+  const wordmark = <span className="brand-wordmark"><span className="brand-title">{APP_NAME}</span><small>실시간 강의실</small></span>;
   function tapSymbol() {
     const now = Date.now();
     taps.current.count = now - taps.current.last > 5000 ? 1 : taps.current.count + 1;
     taps.current.last = now;
     if (taps.current.count === 5) { taps.current.count = 0; setSignIn(true); }
   }
-  if (!hostAccess) return <a href="/" className="brand" aria-label="HJSY AI Edu 홈">{symbol}{wordmark}</a>;
-  return <><div className="brand"><button className="brand-access" type="button" onClick={tapSymbol} aria-label="HJSY AI Edu 로고">{symbol}</button><a className="brand-home" href="/" aria-label="HJSY AI Edu 홈">{wordmark}</a></div>{signIn && <HostAccessDialog roomCode={roomCode} onClose={() => setSignIn(false)} />}</>;
+  if (!hostAccess) return <a href="/" className="brand" aria-label={`${APP_NAME} 홈`}>{symbol}{wordmark}</a>;
+  return <><div className="brand"><button className="brand-access" type="button" onClick={tapSymbol} aria-label={`${APP_NAME} 로고`}>{symbol}</button><a className="brand-home" href="/" aria-label={`${APP_NAME} 홈`}>{wordmark}</a></div>{signIn && <HostAccessDialog roomCode={roomCode} onClose={() => setSignIn(false)} />}</>;
 }
 
 function HostAccessDialog({ roomCode, onClose }: { roomCode: string; onClose: () => void }) {

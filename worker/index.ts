@@ -1,6 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { AppError, ensureDay, mutate, newRoom, snapshot, text, today } from '../lib/domain';
 import { MAIN_ROOM_CODE, type Room } from '../lib/types';
+import { APP_NAME } from '../lib/brand';
 
 interface Env { CLASS_BOARD: DurableObjectNamespace<ClassBoard>; ASSETS: Fetcher; HOST_PASSWORD?: string }
 type Session = { purpose: 'host' | 'guest'; id: string; exp: number };
@@ -64,9 +65,9 @@ export class ClassBoard extends DurableObject<Env> {
   }
   private async room(code: string): Promise<Room> {
     let room = await this.ctx.storage.get<Room>(`room:${code}`);
-    if (!room && code === MAIN_ROOM_CODE) { room = newRoom('HJSY AI Edu'); room.code = MAIN_ROOM_CODE; await this.ctx.storage.put(`room:${code}`, room); }
+    if (!room && code === MAIN_ROOM_CODE) { room = newRoom(APP_NAME); room.code = MAIN_ROOM_CODE; await this.ctx.storage.put(`room:${code}`, room); }
     if (!room) throw new AppError('강의실을 찾을 수 없습니다. 참여 코드를 확인해주세요.', 404);
-    if (code === MAIN_ROOM_CODE && ['현준선영 AI 교육', 'HJSY AI edu'].includes(room.title)) { room.title = 'HJSY AI Edu'; await this.ctx.storage.put(`room:${code}`, room); }
+    if (code === MAIN_ROOM_CODE && ['현준선영 AI 교육', 'HJSY AI edu', 'HJSY AI Edu'].includes(room.title)) { room.title = APP_NAME; await this.ctx.storage.put(`room:${code}`, room); }
     if (!room.days[today()] || Object.keys(room.days).length !== 1) { ensureDay(room); await this.ctx.storage.put(`room:${code}`, room); }
     return room;
   }

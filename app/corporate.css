@@ -1,4 +1,4 @@
-/* Corporate education presentation. Layout and live functionality remain in live-room.css. */
+/* AI Strategy Lab classroom. Layout and live functionality remain in live-room.css. */
 :root{
   --forest:#4656a5;
   --forest-dark:#35458b;
@@ -307,4 +307,33 @@ input::placeholder,textarea::placeholder{color:#778599}
   .chat-input-row textarea{font-size:16px;line-height:24px}
   .chat-input-row textarea::placeholder{color:#526175}
   .composer-hint{color:#526175}
+}
+
+/* The institute identity and a compact link to its introduction. */
+.brand-wordmark>.brand-title{font-size:19px;font-weight:650;letter-spacing:-.65px;color:#0f1b4c;white-space:nowrap}
+.about-link{display:inline-flex;align-items:center;justify-content:center;width:36px;min-width:36px;height:36px;color:#526175;border:1px solid var(--line);border-radius:7px;flex:none}
+.about-link:hover{color:#35458b;background:var(--mint)}
+.entry-header-actions{display:flex;align-items:center;gap:8px}
+.entry-art{aspect-ratio:680/320}
+.entry-art img{object-fit:contain;padding:20px}
+@media(max-width:760px){
+  .brand-wordmark>.brand-title{font-size:16px;letter-spacing:-.5px}
+  .about-link{width:32px;min-width:32px;height:36px}
+  .live-header{gap:8px}
+}
+@media(max-width:480px){
+  .live-header-actions .survey-link,.live-header-actions .live-share{width:36px;min-width:36px;gap:0}
+  .live-header-actions .survey-link>span,.live-header-actions .live-share>span{display:none}
+}
+@media(max-width:360px){
+  .live-header{gap:6px}
+  .live-header .brand{gap:6px}
+  .brand-mark{width:28px;height:28px}
+  .brand-wordmark>.brand-title{font-size:14px}
+  .live-header-actions{gap:3px}
+  .live-header-actions .survey-link,.live-header-actions .live-share{width:32px;min-width:32px;padding:3px}
+  .live-header-actions .about-link,.live-header-actions>.icon-button,.live-header .room-settings summary{width:30px;min-width:30px;height:36px;min-height:36px;padding:3px}
+  .entry-header{padding-left:12px;padding-right:12px;gap:8px}
+  .entry-header .brand{gap:6px}
+  .entry-header-actions{gap:6px}
 }

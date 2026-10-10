@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 200" width="2040" height="600">
+<defs>
+<linearGradient id="gTop" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#3D7BF0"/><stop offset="1" stop-color="#5B9BFF"/></linearGradient>
+<linearGradient id="gBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1FB6F6"/><stop offset="1" stop-color="#2F5BE0"/></linearGradient>
+<linearGradient id="gSide" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3B5BDB" stop-opacity="0"/><stop offset="1" stop-color="#3B4FC4" stop-opacity="0.9"/></linearGradient>
+</defs>
+
+<g transform="translate(40,49) scale(1.2)"><polygon points="95,24 108,24 108,85 95,85" fill="url(#gSide)"/><polygon points="40,0 95,0 95,17 54,17" fill="url(#gTop)"/><polygon points="76,17 95,17 95,85 76,85" fill="url(#gBar)"/><polygon points="48,68 76,68 76,85 62,85" fill="#2A3A9E"/><polygon points="40,0 54,17 22,85 0,85" fill="#1C2F7E"/></g>
+<text x="196" y="112" font-family="'Noto Sans KR', Pretendard, 'Malgun Gothic', sans-serif" font-size="72" font-weight="500" fill="#0F1B4C" textLength="440" lengthAdjust="spacing">AI전략연구소</text>
+<text x="198" y="149" font-family="'Noto Sans KR', Pretendard, 'Malgun Gothic', sans-serif" font-size="22" font-weight="500" fill="#5B6B8A" textLength="436" lengthAdjust="spacing">AI STRATEGY LAB</text></svg>

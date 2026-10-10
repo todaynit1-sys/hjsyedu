@@ -44,6 +44,7 @@ try {
   assert.equal((await request('/api/rooms', { title: '권한 없음' })).response.status, 401);
   const main = await Promise.all(Array.from({ length: 10 }, () => request('/api/rooms/HJSYAI', { type: 'join' })));
   assert(main.every(result => result.data.code === 'HJSYAI'));
+  assert(main.every(result => result.data.title === 'AI전략연구소'));
   const code = (await request('/api/rooms', { title: '50명 동시 검증' }, host)).data.code;
   const path = `/api/rooms/${code}`;
   const teacher = await connect(path, host);
@@ -104,6 +105,20 @@ try {
 
   const ns = await mf.getDurableObjectNamespace('CLASS_BOARD'); const stub = ns.getByName('hjsy-class-board');
   const stored = async code => JSON.parse(await stub.stored(code));
+  const legacyMain = await stored('HJSYAI');
+  const legacyDay = Object.values(legacyMain.days)[0];
+  legacyDay.messages.push({ id: 'legacy-message', text: '브랜드 변경 전의 채팅', url: null, pinned: true, createdAt: new Date().toISOString() });
+  legacyDay.polls[0].votes.fixture = 1;
+  for (const oldName of ['HJSY AI Edu', 'HJSY AI edu', '현준선영 AI 교육']) {
+    legacyMain.title = oldName; await stub.seed('HJSYAI', JSON.stringify(legacyMain));
+    const renamed = await request('/api/rooms/HJSYAI');
+    assert.equal(renamed.data.title, 'AI전략연구소');
+    assert.equal(renamed.data.messages[0].text, '브랜드 변경 전의 채팅');
+    assert.equal(renamed.data.polls[0].total, 1);
+    assert.deepEqual((await stored('HJSYAI')).days, legacyMain.days);
+  }
+  legacyMain.title = '강사가 정한 강의명'; await stub.seed('HJSYAI', JSON.stringify(legacyMain));
+  assert.equal((await request('/api/rooms/HJSYAI')).data.title, '강사가 정한 강의명');
   assert.equal(await stub.midnightAt('2026-10-09T14:59:59Z'), Date.parse('2026-10-09T15:00:00Z'));
   assert.equal(await stub.midnightAt('2026-10-09T15:00:00Z'), Date.parse('2026-10-10T15:00:00Z'));
   const old = await stored(code); const oldDay = Object.values(old.days)[0];
