@@ -357,6 +357,7 @@ input::placeholder,textarea::placeholder{color:#778599}
 .poll-management-actions .secondary{display:flex;align-items:center;gap:6px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;color:var(--forest-dark);background:var(--mint)}
 .question-dialog .error,.poll-management-dialog .error{color:#a33749}
 @media(max-width:760px){
+  .live-poll-scroll{grid-auto-rows:max-content;align-content:start}
   .live-room .live-polls-heading{min-height:32px}
   .live-poll-actions .new-poll-button{min-height:32px;padding:4px 8px;font-size:12px}
   .poll-manage-button{min-height:28px;padding:3px 6px;font-size:11px}
