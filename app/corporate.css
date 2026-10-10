@@ -313,6 +313,7 @@ input::placeholder,textarea::placeholder{color:#778599}
 .brand-wordmark>.brand-title{font-size:19px;font-weight:650;letter-spacing:-.65px;color:#0f1b4c;white-space:nowrap}
 .about-link{display:inline-flex;align-items:center;justify-content:center;width:36px;min-width:36px;height:36px;color:#526175;border:1px solid var(--line);border-radius:7px;flex:none}
 .about-link:hover{color:#35458b;background:var(--mint)}
+.about-link img{width:24px;height:24px;object-fit:contain}
 .entry-header-actions{display:flex;align-items:center;gap:8px}
 .entry-art{aspect-ratio:680/320}
 .entry-art img{object-fit:contain;padding:20px}
@@ -336,4 +337,28 @@ input::placeholder,textarea::placeholder{color:#778599}
   .entry-header{padding-left:12px;padding-right:12px;gap:8px}
   .entry-header .brand{gap:6px}
   .entry-header-actions{gap:6px}
+}
+
+/* Host actions stay readable without opening menus inside the clipped poll list. */
+.poll-manage-button{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-height:28px;padding:3px 8px;border:1px solid var(--line);border-radius:6px;color:var(--forest-dark);background:var(--mint);font-size:12px;font-weight:650;margin-left:auto}
+.live-poll-actions .new-poll-button{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:36px;padding:5px 10px;border:1px solid var(--line);border-radius:6px;background:var(--mint);color:var(--forest-dark);font-size:13px;font-weight:650;white-space:nowrap}
+.poll-manage-button:hover,.live-poll-actions .new-poll-button:hover{background:var(--line)}
+.question-dialog,.poll-management-dialog{text-align:left}
+.question-dialog h2,.poll-management-dialog h2{padding-right:25px;color:var(--ink)}
+.question-dialog>p,.poll-management-dialog>p{color:var(--muted);line-height:1.6;overflow-wrap:anywhere}
+.question-dialog .new-poll{border:0;background:transparent;border-radius:0;margin-top:16px}
+.question-dialog .new-poll form{padding:0}
+.question-dialog .new-poll label{display:block;margin:16px 0 8px;color:var(--ink);font-size:14px;font-weight:650}
+.question-dialog .new-poll input,.question-dialog .new-poll textarea{width:100%;text-align:left;color:var(--ink);background:#fff;border:1px solid var(--line);font-size:16px;line-height:1.5;min-height:44px;padding:10px 12px}
+.question-dialog .new-poll textarea{resize:vertical}
+.question-dialog .hint,.poll-management-dialog .hint{color:var(--muted);font-size:12px;line-height:1.6}
+.poll-management-actions{display:grid;gap:10px;margin:20px 0 12px}
+.poll-management-actions .primary,.poll-management-actions .secondary{width:100%;min-height:44px;margin:0;justify-content:center;font-size:14px}
+.poll-management-actions .secondary{display:flex;align-items:center;gap:6px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;color:var(--forest-dark);background:var(--mint)}
+.question-dialog .error,.poll-management-dialog .error{color:#a33749}
+@media(max-width:760px){
+  .live-room .live-polls-heading{min-height:32px}
+  .live-poll-actions .new-poll-button{min-height:32px;padding:4px 8px;font-size:12px}
+  .poll-manage-button{min-height:28px;padding:3px 6px;font-size:11px}
+  .live-room.is-host .live-poll-scroll{max-height:148px}
 }
