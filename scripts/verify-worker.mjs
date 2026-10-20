@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
-import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
+import { Miniflare, convertV4MiniflareOptions, Log, LogLevel } from 'miniflare';
 
 // Test-only RPC methods are appended to a local bundle, never to the deployed Worker.
 const script = await readFile('.local/worker-build/index.js', 'utf8') + `
@@ -10,11 +10,18 @@ export class TestBoard extends ClassBoard {
   async triggerAlarm() { await this.ctx.storage.setAlarm(Date.now() + 30); }
   async alarmTime() { return await this.ctx.storage.getAlarm(); }
   async midnightAt(iso) { return nextMidnight(new Date(iso)); }
+  async fileStats(code) { return JSON.stringify({
+    files: this.ctx.storage.sql.exec('SELECT COUNT(*) AS n FROM classroom_files WHERE room = ?', code).one().n,
+    chunks: this.ctx.storage.sql.exec('SELECT COUNT(*) AS n FROM classroom_file_chunks').one().n
+  }); }
+  async fileDate(id, date) { this.ctx.storage.sql.exec('UPDATE classroom_files SET date = ? WHERE id = ?', date, id); }
+  async quotaFixture(id, code, date, size) { this.ctx.storage.sql.exec('INSERT INTO classroom_files (id, room, date, name, size, digest) VALUES (?, ?, ?, ?, ?, ?)', id, code, date, 'quota-fixture', size, 'test'); }
 }
 `;
 const options = convertV4MiniflareOptions({ name: 'hjsy-test', script, modules: true, compatibilityDate: '2026-10-09',
   durableObjects: { CLASS_BOARD: { className: 'TestBoard', useSQLite: true } },
   resourcePersistencePath: `.local/worker-test-${crypto.randomUUID()}`, cf: false });
+options.log = new Log(LogLevel.WARN);
 let mf = new Miniflare(options);
 const sockets = [];
 const origin = 'https://classroom.test';
@@ -31,6 +38,18 @@ async function connect(path, cookie) {
   const peer = { ws, latest: null, messages: [], pong: false };
   ws.addEventListener('message', event => { if (event.data === 'pong') { peer.pong = true; return; } const value = JSON.parse(event.data); peer.messages.push(value); peer.latest = value.data; });
   return peer;
+}
+async function upload(path, bytes, cookie, options = {}) {
+  const id = options.id ?? crypto.randomUUID();
+  // Exercise the real local HTTP upload path, including early body rejection.
+  const endpoint = await mf.ready;
+  const response = await fetch(new URL(path + '/files', endpoint), { method: 'POST', headers: {
+    'content-type': 'application/octet-stream', origin: endpoint.origin, ...(cookie ? { cookie } : {}),
+    'x-upload-id': id, 'x-file-name': encodeURIComponent(options.name ?? '실습 자료.pdf'),
+    'x-class-date': options.date ?? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()),
+    'x-file-caption': encodeURIComponent('오늘 실습 자료입니다.'), ...options.headers
+  }, body: bytes, ...(bytes instanceof ReadableStream ? { duplex: 'half' } : {}) });
+  return { response, data: await response.json(), id };
 }
 async function until(fn, label) { for (let i = 0; i < 100; i++) { if (await fn()) return; await new Promise(resolve => setTimeout(resolve, 30)); } throw new Error(label); }
 try {
@@ -105,6 +124,7 @@ try {
 
   const ns = await mf.getDurableObjectNamespace('CLASS_BOARD'); const stub = ns.getByName('hjsy-class-board');
   const stored = async code => JSON.parse(await stub.stored(code));
+  const fileStats = async code => JSON.parse(await stub.fileStats(code));
   const legacyMain = await stored('HJSYAI');
   const legacyDay = Object.values(legacyMain.days)[0];
   legacyDay.messages.push({ id: 'legacy-message', text: '브랜드 변경 전의 채팅', url: null, pinned: true, createdAt: new Date().toISOString() });
@@ -136,15 +156,82 @@ try {
   assert(!(await stored('OLD123')).days['2020-01-01']);
   assert.equal((await request(path, { type: 'message', date: '2020-01-01', text: '오래된 화면' }, host)).response.status, 409);
 
+  // Files: permissions, real binary round trips, chunking, retries, limits and expiry.
+  const payload = Uint8Array.from({ length: 1_300_123 }, (_, i) => i % 251);
+  assert.equal((await upload(path, new Uint8Array([1]), students[1].cookie)).response.status, 401);
+  assert.equal((await upload(path, new Uint8Array([1]), undefined)).response.status, 401);
+  assert.equal((await upload(path, new Uint8Array([1]), host, { headers: { origin: 'https://other.test' } })).response.status, 403);
+  assert.equal((await upload(path, new Uint8Array([1]), host, { date: '2020-01-01' })).response.status, 409);
+  assert.equal((await upload(path, new Uint8Array(), host)).response.status, 400);
+  assert.equal((await upload(path, new Uint8Array(10 * 1024 * 1024 + 1), host)).response.status, 413);
+  const streamedOverflow = new ReadableStream({ start(controller) {
+    for (let i = 0; i < 10; i++) controller.enqueue(new Uint8Array(1024 * 1024));
+    controller.enqueue(new Uint8Array([1])); controller.close();
+  } });
+  assert.equal((await upload(path, streamedOverflow, host)).response.status, 413, 'Chunked uploads must not bypass the byte limit');
+  const attached = await upload(path, payload, host, { name: '실습 "앱" 자료.zip' });
+  console.log('Files: permission and size checks passed; upload saved.');
+  assert.equal(attached.response.status, 200, JSON.stringify(attached.data));
+  const file = attached.data.messages.at(-1).attachment;
+  assert.equal(file.size, payload.length); assert.equal(file.id, attached.id);
+  await until(() => students[1].peer.latest?.messages.some(m => m.attachment?.id === file.id), 'Attachment did not broadcast');
+  assert.deepEqual(await fileStats(code), { files: 1, chunks: 3 });
+  const retry = await upload(path, payload, host, { id: attached.id, name: file.name });
+  assert.equal(retry.response.status, 200); assert.equal(retry.data.messages.filter(m => m.attachment?.id === file.id).length, 1);
+  assert.equal((await upload(path, new Uint8Array([1]), host, { id: attached.id, name: file.name })).response.status, 409);
+  const downloadPath = origin + path + '/files/' + file.id;
+  assert.equal((await mf.dispatchFetch(downloadPath)).status, 401);
+  assert.equal((await mf.dispatchFetch(downloadPath, { headers: { cookie: students[1].cookie, origin: 'https://other.test' } })).status, 403);
+  assert.equal((await mf.dispatchFetch(origin + '/api/rooms/HJSYAI/files/' + file.id, { headers: { cookie: host } })).status, 404);
+  const downloaded = await mf.dispatchFetch(downloadPath, { headers: { cookie: students[1].cookie } });
+  assert.match(downloaded.headers.get('content-disposition'), /attachment;.*filename\*=UTF-8''/);
+  assert.equal(downloaded.headers.get('content-type'), 'application/octet-stream');
+  assert.equal(downloaded.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(new Uint8Array(await downloaded.arrayBuffer()), payload);
+  console.log('Files: exact binary download passed; checking 50 simultaneous downloads.');
+  const parallelDownloads = await Promise.all(Array.from({ length: 50 }, async () => {
+    const response = await mf.dispatchFetch(downloadPath, { headers: { cookie: students[1].cookie } });
+    assert.equal(response.status, 200); const bytes = new Uint8Array(await response.arrayBuffer());
+    assert.deepEqual(bytes, payload); return bytes.length;
+  }));
+  assert.equal(parallelDownloads.length, 50);
+  console.log('Files: 50 downloads passed; checking deletion and daily expiry.');
+  const fileMessage = attached.data.messages.at(-1);
+  await request(path, { type: 'delete', id: fileMessage.id }, host);
+  assert.equal((await mf.dispatchFetch(downloadPath, { headers: { cookie: host } })).status, 404);
+  assert.deepEqual(await fileStats(code), { files: 0, chunks: 0 });
+  const maximum = await upload(path, new Uint8Array(10 * 1024 * 1024), host);
+  assert.equal(maximum.response.status, 200, 'An exact 10MiB file is allowed');
+  await request(path, { type: 'delete', id: maximum.data.messages.at(-1).id }, host);
+  const resetFile = await upload(path, payload, host);
+  await request(path, { type: 'room-reset', target: 'mood' }, host);
+  assert.equal((await fileStats(code)).files, 1);
+  await request(path, { type: 'room-reset', target: 'chat' }, host);
+  assert.deepEqual(await fileStats(code), { files: 0, chunks: 0 });
+  assert.equal((await mf.dispatchFetch(origin + path + '/files/' + resetFile.id, { headers: { cookie: host } })).status, 404);
+  const quotaId = crypto.randomUUID();
+  await stub.quotaFixture(quotaId, code, clean.days[Object.keys(clean.days)[0]].date, 50 * 1024 * 1024);
+  assert.equal((await upload(path, new Uint8Array([1]), host)).response.status, 409);
+  await request(path, { type: 'room-reset', target: 'chat' }, host);
+  const expires = await upload(path, payload, host);
+  await stub.fileDate(expires.id, '2020-01-01');
+  await stub.triggerAlarm();
+  await until(async () => (await fileStats(code)).files === 0, 'Daily alarm did not delete file bytes');
+  assert.deepEqual(await fileStats(code), { files: 0, chunks: 0 });
+  assert.equal((await mf.dispatchFetch(origin + path + '/files/' + expires.id, { headers: { cookie: host } })).status, 404);
+  const restartFile = await upload(path, payload, host);
+
   for (const ws of sockets) if (ws.readyState === 1) ws.close(1000);
   await new Promise(resolve => setTimeout(resolve, 100)); await mf.dispose();
   mf = new Miniflare(options);
   assert.equal((await request('/api/auth', undefined, host)).data.host, true, 'Signed session must survive runtime restart');
   assert.equal((await request(path)).data.polls[0].total, 0);
+  const afterRestart = await mf.dispatchFetch(origin + path + '/files/' + restartFile.id, { headers: { cookie: host } });
+  assert.deepEqual(new Uint8Array(await afterRestart.arrayBuffer()), payload);
   for (let i = 0; i < 8; i++) assert.equal((await request('/api/auth', { password: 'wrong' }, undefined, { 'cf-connecting-ip': '198.51.100.7' })).response.status, 401);
   assert.equal((await request('/api/auth', { password: '0423' }, undefined, { 'cf-connecting-ip': '198.51.100.7' })).response.status, 429);
   await mkdir('.local', { recursive: true });
   await writeFile('.local/worker-verification.json', JSON.stringify({ passed: true, concurrentStudents: 50,
-    checks: ['signed instructor and guest cookies', 'CSRF rejection', 'host-only moderation', '50 WebSocket clients and concurrent votes', 'per-viewer privacy', 'duplicate tabs and disconnect counts', 'hibernation ping and eviction recovery', 'poll archive', 'host-only chat/mood/break resets broadcast and preserve other data', 'stale votes rejected after reset', 'Seoul midnight scheduling', 'real alarm clears persisted data and broadcasts', 'stale-day reads expire data', 'session survives runtime restart', 'login attempt limit'] }, null, 2));
-  console.log('PASS: 50 real-time clients, concurrent votes, privacy, signed auth, actual daily alarm, persistence and restart.');
+    checks: ['signed instructor and guest cookies', 'CSRF rejection', 'host-only moderation', '50 WebSocket clients and concurrent votes', 'per-viewer privacy', 'duplicate tabs and disconnect counts', 'hibernation ping and eviction recovery', 'poll archive', 'host-only chat/mood/break resets broadcast and preserve other data', 'stale votes rejected after reset', 'Seoul midnight scheduling', 'real alarm clears persisted data and broadcasts', 'stale-day reads expire data', 'session survives runtime restart', 'login attempt limit', 'host-only file upload and CSRF rejection', '10MiB boundary and chunked overflow rejection', 'exact binary round trip and 50 concurrent downloads', 'upload retry deduplication', 'room-scoped downloads', 'file bytes removed on deletion, chat reset and actual daily alarm', 'daily file storage quota', 'file persistence across runtime restart'] }, null, 2));
+  console.log('PASS: 50 real-time clients, concurrent votes, privacy, signed auth, daily alarm, file uploads, 50 concurrent downloads, expiry, persistence and restart.');
 } finally { await mf.dispose(); }

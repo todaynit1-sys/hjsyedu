@@ -2,6 +2,8 @@ import { DurableObject } from 'cloudflare:workers';
 import { AppError, ensureDay, mutate, newRoom, snapshot, text, today } from '../lib/domain';
 import { MAIN_ROOM_CODE, type Room } from '../lib/types';
 import { APP_NAME } from '../lib/brand';
+import { MAX_FILE_BYTES } from '../lib/files';
+import { FileStore } from './file-store';
 
 interface Env { CLASS_BOARD: DurableObjectNamespace<ClassBoard>; ASSETS: Fetcher; HOST_PASSWORD?: string }
 type Session = { purpose: 'host' | 'guest'; id: string; exp: number };
@@ -18,6 +20,11 @@ function json(value: unknown, status = 200, cookie?: string): Response {
 function sameOrigin(request: Request) {
   const origin = request.headers.get('origin');
   if ((origin && origin !== new URL(request.url).origin) || request.headers.get('sec-fetch-site') === 'cross-site') throw new AppError('다른 사이트에서 보낸 요청은 허용되지 않습니다.', 403);
+}
+async function discardBody(reader: ReadableStreamDefaultReader<Uint8Array>, limit: number) {
+  let discarded = 0;
+  try { while (true) { const part = await reader.read(); if (part.done) break; discarded += part.value.byteLength; if (discarded > limit) { await reader.cancel(); break; } } }
+  catch { /* The client may already have cancelled its upload. */ }
 }
 async function body(request: Request): Promise<Record<string, unknown>> {
   if (!request.headers.get('content-type')?.startsWith('application/json')) throw new AppError('JSON 요청이 필요합니다.', 415);
@@ -38,8 +45,12 @@ export function nextMidnight(now = new Date()): number { return Date.parse(`${to
 export class ClassBoard extends DurableObject<Env> {
   private signingKey!: CryptoKey;
   private queue: Promise<unknown> = Promise.resolve();
+  private files: FileStore;
+  private filesDate = '';
+  private pendingUploads = 0;
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.files = new FileStore(ctx.storage);
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
     ctx.blockConcurrencyWhile(async () => {
       let key = await ctx.storage.get<Uint8Array>('auth-key');
@@ -53,6 +64,53 @@ export class ClassBoard extends DurableObject<Env> {
     });
   }
   private exclusive<T>(action: () => Promise<T>): Promise<T> { const result = this.queue.then(action); this.queue = result.catch(() => {}); return result; }
+  private expireFiles() { const date = today(); if (this.filesDate !== date) { this.files.expire(date); this.filesDate = date; } }
+  private async upload(request: Request, code: string): Promise<Response> {
+    sameOrigin(request);
+    if (!await this.session(request, 'host')) throw new AppError('강사 로그인이 필요합니다.', 401);
+    if (request.headers.get('content-type') !== 'application/octet-stream') throw new AppError('파일 내용을 확인해주세요.', 415);
+    if (this.pendingUploads >= 2) throw new AppError('다른 파일을 올리고 있어요. 잠시 후 다시 시도해주세요.', 429);
+    const date = request.headers.get('x-class-date');
+    if (date !== today()) throw new AppError('날짜가 바뀌었어요. 새로고침 후 다시 올려주세요.', 409);
+    const id = request.headers.get('x-upload-id') ?? '';
+    if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)) throw new AppError('파일 요청을 확인해주세요.');
+    let name: string; let caption: string; let url: string;
+    try {
+      name = decodeURIComponent(request.headers.get('x-file-name') ?? '').split(/[/\\]/).at(-1)!.replace(/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g, '').trim();
+      caption = decodeURIComponent(request.headers.get('x-file-caption') ?? '');
+      url = decodeURIComponent(request.headers.get('x-file-url') ?? '');
+    } catch { throw new AppError('파일 이름과 내용을 확인해주세요.'); }
+    name = text(name, '파일 이름', 160);
+    if (Number(request.headers.get('content-length')) > MAX_FILE_BYTES) throw new AppError('파일은 개당 10MB까지 올릴 수 있어요.', 413);
+    const reader = request.body?.getReader(); if (!reader) throw new AppError('파일을 선택해주세요.');
+    // Read before entering the mutation queue, so a slow upload never blocks chat.
+    this.pendingUploads++;
+    try {
+      const parts: Uint8Array[] = []; let size = 0;
+      while (true) { const part = await reader.read(); if (part.done) break; size += part.value.byteLength; if (size > MAX_FILE_BYTES) { await discardBody(reader, 65_536); throw new AppError('파일은 개당 10MB까지 올릴 수 있어요.', 413); } parts.push(part.value); }
+      if (!size) throw new AppError('빈 파일은 올릴 수 없어요.');
+      const bytes = new Uint8Array(size); let offset = 0; for (const part of parts) { bytes.set(part, offset); offset += part.length; }
+      const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('');
+      return await this.exclusive(async () => {
+        if (date !== today()) throw new AppError('날짜가 바뀌었어요. 새로고침 후 다시 올려주세요.', 409);
+        if (!await this.session(request, 'host')) throw new AppError('강사 로그인이 필요합니다.', 401);
+        this.expireFiles();
+        const room = structuredClone(await this.room(code));
+        const existing = this.files.existing(id);
+        if (existing) {
+          if (existing.room !== code || existing.date !== date || existing.digest !== digest || existing.name !== name) throw new AppError('파일 요청이 중복되었어요. 파일을 다시 선택해주세요.', 409);
+          return json(this.view(room, null));
+        }
+        this.files.checkCapacity(code, size);
+        mutate(room, { type: 'message', text: caption.trim() || name, url, date }, null, true);
+        const file = { id, name, size };
+        room.days[date].messages.at(-1)!.attachment = file;
+        if (encoder.encode(JSON.stringify(room)).byteLength > 900_000) throw new AppError('오늘 강의실의 저장 한도에 도달했습니다. 메시지를 일부 삭제해주세요.', 409);
+        this.files.save(room, date, file, bytes, digest); this.broadcast(room);
+        return json(this.view(room, null));
+      });
+    } finally { this.pendingUploads--; }
+  }
   private async token(session: Session): Promise<string> { const value = base64(encoder.encode(JSON.stringify(session))); return `${value}.${base64(new Uint8Array(await crypto.subtle.sign('HMAC', this.signingKey, encoder.encode(value))))}`; }
   private async session(request: Request, purpose: Session['purpose']): Promise<Session | null> {
     const value = request.headers.get('cookie')?.split(';').map(s => s.trim()).find(s => s.startsWith(`cb_${purpose}=`))?.slice(purpose.length + 4);
@@ -91,12 +149,31 @@ export class ClassBoard extends DurableObject<Env> {
   }
   async fetch(request: Request): Promise<Response> {
     let input: Record<string, unknown> = {};
-    try { if (request.method === 'POST') input = await body(request); }
-    catch (error) { return json({ error: error instanceof AppError ? error.message : '요청 내용을 확인해주세요.' }, error instanceof AppError ? error.status : 400); }
+    try {
+      const upload = /^\/api\/rooms\/([A-Z0-9]{6})\/files$/.exec(new URL(request.url).pathname);
+      if (request.method === 'POST' && upload) return await this.upload(request, upload[1]);
+      if (request.method === 'POST') input = await body(request);
+    } catch (error) {
+      // Finish a bounded rejected body before replying across the Worker/DO
+      // bridge. Discard chunks immediately; never buffer unauthenticated files.
+      if (request.body && !request.body.locked) {
+        await discardBody(request.body.getReader(), MAX_FILE_BYTES + 65_536);
+      }
+      if (!(error instanceof AppError)) console.error('Classroom upload/request failed', error);
+      return json({ error: error instanceof AppError ? error.message : '요청을 완료하지 못했어요. 잠시 후 다시 시도해주세요.' }, error instanceof AppError ? error.status : 500);
+    }
     return this.exclusive(async () => {
       try {
         const path = new URL(request.url).pathname;
         const host = await this.session(request, 'host'); const guestSession = await this.session(request, 'guest'); let guest = guestSession?.id ?? null;
+        this.expireFiles();
+        const download = /^\/api\/rooms\/([A-Z0-9]{6})\/files\/([a-f0-9-]{36})$/.exec(path);
+        if (download) {
+          if (request.method !== 'GET') throw new AppError('지원하지 않는 요청입니다.', 405);
+          sameOrigin(request);
+          if (!host && !guestSession) throw new AppError('먼저 강의실에 참여해주세요.', 401);
+          return this.files.download(await this.room(download[1]), download[2]);
+        }
         if (path === '/api/auth') {
           if (request.method === 'GET') return json({ host: Boolean(host), mode: 'cloud' });
           if (request.method !== 'POST') throw new AppError('지원하지 않는 요청입니다.', 405);
@@ -153,7 +230,7 @@ export class ClassBoard extends DurableObject<Env> {
         } else {
           room = structuredClone(room); mutate(room, input, guest, Boolean(host));
           if (encoder.encode(JSON.stringify(room)).byteLength > 900_000) throw new AppError('오늘 강의실의 저장 한도에 도달했습니다. 메시지를 일부 삭제해주세요.', 409);
-          await this.ctx.storage.put(`room:${code}`, room); this.broadcast(room);
+          this.files.saveRoom(room); this.broadcast(room);
         }
         return json(this.view(room, guest), 200, setCookie);
       } catch (error) {
@@ -176,6 +253,7 @@ export class ClassBoard extends DurableObject<Env> {
   async webSocketError(ws: WebSocket) { await this.webSocketClose(ws, 1011); }
   async alarm() {
     await this.exclusive(async () => {
+      this.files.expire(); this.filesDate = today();
       const rooms = await this.ctx.storage.list<Room>({ prefix: 'room:' });
       for (const [key, room] of rooms) { ensureDay(room); await this.ctx.storage.put(key, room); this.broadcast(room); }
       const attempts = await this.ctx.storage.list<{ since: number }>({ prefix: 'attempt:' });
