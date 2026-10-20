@@ -66,6 +66,17 @@ npm run build:worker-test
 
 한국 시간 자정에 채팅과 파일 내용을 함께 삭제합니다. 메시지 삭제나 채팅 초기화도 해당 첨부 파일을 지웁니다. 컨디션·쉬는시간 초기화는 첨부 자료에 영향을 주지 않습니다. 내려받은 사본은 참여자의 기기에 남습니다.
 
+### 기본 실습자료 PDF
+
+채팅 제목 옆 **자료** 버튼에서 학습자용 예시 PDF 4종을 상시 내려받습니다. 목록만 별도 창으로 열어 채팅·투표 영역 높이를 유지합니다. 강사와 수강생 모두 로그인 없이 자료 목록을 볼 수 있습니다.
+
+- 가상기업 학습자료: `/materials/virtual-company.pdf`
+- 산업안전·중대재해: `/materials/workplace-safety.pdf`
+- 화학물질관리법: `/materials/chemical-management.pdf`
+- 대기환경보전법: `/materials/air-environment.pdf`
+
+원본은 `public/materials/`, 표시 이름·쪽수·용량은 `lib/materials.ts`에 있습니다. 파일 교체 시 목록 정보도 함께 갱신하세요. 이 자료는 GitHub에 포함되는 정적 파일이므로 자정 삭제나 채팅 초기화에 영향을 받지 않습니다. 강사용 해설은 공개 자료에 포함하지 않습니다.
+
 ### 실습 웹앱을 상시 제공할 때
 
 HTML·CSS·JavaScript로 된 실습 웹앱은 `public/practice/앱이름/index.html`과 관련 파일을 GitHub에 함께 올리면 됩니다. 배포 후 `/practice/앱이름/` 주소를 채팅에 공유하세요. 파일의 상대 경로가 해당 폴더 안에서 동작하도록 구성해야 합니다. 소스 빌드나 서버가 필요한 앱은 그 앱의 실행 방식에 맞춘 연결 작업이 필요합니다.

@@ -323,6 +323,29 @@ input::placeholder,textarea::placeholder{color:#778599}
 .chat-file-draft{display:flex;align-items:center;gap:9px;min-width:0;padding:9px 11px;margin-bottom:8px;border:1px solid var(--line);border-radius:8px;background:var(--mint);color:var(--ink)}
 .chat-file-draft .icon-button{flex:none;width:36px;min-height:36px}
 .file-attach-button{flex:none}
+.chat-header-tools{display:flex;align-items:center;gap:8px;flex:none}
+.materials-button{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-height:36px;padding:5px 9px;flex:none;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--forest-dark);font-size:12px;font-weight:650;white-space:nowrap}
+.materials-button:hover{background:var(--mint)}
+.materials-dialog{text-align:left}
+.materials-dialog[open]{display:flex;flex-direction:column;overflow:hidden}
+.materials-dialog h2{padding-right:24px;color:var(--ink)}
+.materials-dialog h2,.materials-dialog>p{flex:none}
+.materials-dialog>p{color:var(--muted);line-height:1.6}
+.materials-list{list-style:none;padding:2px;margin:20px 0 14px;display:grid;gap:8px;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.materials-list li{min-width:0}
+.materials-list a{display:flex;align-items:center;gap:10px;min-width:0;min-height:72px;padding:11px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);text-decoration:none}
+.materials-list a:hover{background:var(--mint);border-color:var(--forest)}
+.materials-list a>svg{flex:none;color:var(--forest-dark)}
+.materials-list a>span{flex:1;min-width:0;overflow-wrap:anywhere}
+.materials-list b{display:block;font-size:14px;line-height:1.5;word-break:keep-all}
+.materials-list .material-description{display:block;color:var(--muted);font-size:12px;line-height:1.5}
+.materials-list small{display:block;color:var(--muted);font-size:11px;line-height:1.5}
+.materials-dialog .materials-note{font-size:12px;margin:0}
+@media(max-width:760px){
+  .chat-header-tools{gap:5px}
+  .materials-button{min-height:36px;padding:4px 7px;font-size:11px}
+  .materials-dialog .materials-list{margin-top:16px}
+}
 .entry-header-actions{display:flex;align-items:center;gap:8px}
 .entry-art{aspect-ratio:680/320}
 .entry-art img{object-fit:contain;padding:20px}
