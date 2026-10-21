@@ -1,4 +1,8 @@
 export const MATERIALS = [
+  { title: '회의 전사문', description: '회의 요약·시각화 실습 원문', pages: 13, size: 304370, url: '/materials/meeting-transcript.pdf', filename: '회의_전사문_실습자료.pdf' },
+  { title: '회의 핵심정리', description: '회의 요약 결과 예시', pages: 4, size: 262781, url: '/materials/meeting-summary.pdf', filename: '회의_핵심정리.pdf' },
+  { title: '현장점검·개선조치', description: '개선조치 관리대장 실습', pages: 6, size: 164082, url: '/materials/site-inspection-actions.pdf', filename: '현장점검_개선조치_실습자료.pdf' },
+  { title: '아차사고 경위정리', description: '진술 비교·경위표 실습', pages: 6, size: 169672, url: '/materials/near-miss-analysis.pdf', filename: '아차사고_경위정리_실습자료.pdf' },
   { title: '가상기업 학습자료', description: '가온워크 기업 자료', pages: 9, size: 167964, url: '/materials/virtual-company.pdf', filename: '가상기업_학습자료.pdf' },
   { title: '산업안전·중대재해', description: '기업자료·법령 카드', pages: 6, size: 145423, url: '/materials/workplace-safety.pdf', filename: '산업안전_중대재해_기업자료_법령카드.pdf' },
   { title: '화학물질관리법', description: '기업자료·법령 카드', pages: 6, size: 144453, url: '/materials/chemical-management.pdf', filename: '화학물질관리법_기업자료_법령카드.pdf' },

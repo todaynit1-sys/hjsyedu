@@ -68,8 +68,12 @@ npm run build:worker-test
 
 ### 기본 실습자료 PDF
 
-채팅 제목 옆 **자료** 버튼에서 학습자용 예시 PDF 4종, 실습용 MSDS 3종과 산업안전보건기준 규칙 PDF를 상시 내려받습니다. 목록만 별도 창으로 열어 채팅·투표 영역 높이를 유지합니다. 강사와 수강생 모두 로그인 없이 자료 목록을 볼 수 있습니다.
+채팅 제목 옆 **자료** 버튼에서 실습·참고 PDF 총 12종을 상시 내려받습니다. 새로 추가한 회의·환경안전 실습 자료를 목록 앞쪽에 표시합니다. 목록만 별도 창으로 열어 채팅·투표 영역 높이를 유지합니다. 강사와 수강생 모두 로그인 없이 자료 목록을 볼 수 있습니다.
 
+- 회의 전사문: `/materials/meeting-transcript.pdf`
+- 회의 핵심정리: `/materials/meeting-summary.pdf`
+- 현장점검·개선조치: `/materials/site-inspection-actions.pdf`
+- 아차사고 경위정리: `/materials/near-miss-analysis.pdf`
 - 가상기업 학습자료: `/materials/virtual-company.pdf`
 - 산업안전·중대재해: `/materials/workplace-safety.pdf`
 - 화학물질관리법: `/materials/chemical-management.pdf`
