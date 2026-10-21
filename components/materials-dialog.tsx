@@ -13,7 +13,7 @@ export function MaterialsDialog({ onClose }: { onClose: () => void }) {
   return <dialog ref={ref} className="share-dialog materials-dialog" aria-labelledby="materials-title" aria-describedby="materials-description" onCancel={event => { event.preventDefault(); onClose(); }}>
     <button className="dialog-close icon-button" onClick={onClose} aria-label="기본 실습자료 닫기"><X size={20} /></button>
     <h2 id="materials-title">기본 실습자료</h2>
-    <p id="materials-description">실습에 사용할 예시 PDF를 내려받으세요.</p>
+    <p id="materials-description">강의와 실습에 사용할 PDF를 내려받으세요.</p>
     <ul className="materials-list">{MATERIALS.map(material => <li key={material.url}>
       <a href={material.url} download={material.filename} aria-label={`${material.title} PDF 다운로드`}>
         <FileText size={21} aria-hidden="true" />

@@ -68,12 +68,18 @@ npm run build:worker-test
 
 ### 기본 실습자료 PDF
 
-채팅 제목 옆 **자료** 버튼에서 학습자용 예시 PDF 4종을 상시 내려받습니다. 목록만 별도 창으로 열어 채팅·투표 영역 높이를 유지합니다. 강사와 수강생 모두 로그인 없이 자료 목록을 볼 수 있습니다.
+채팅 제목 옆 **자료** 버튼에서 학습자용 예시 PDF 4종, 실습용 MSDS 3종과 산업안전보건기준 규칙 PDF를 상시 내려받습니다. 목록만 별도 창으로 열어 채팅·투표 영역 높이를 유지합니다. 강사와 수강생 모두 로그인 없이 자료 목록을 볼 수 있습니다.
 
 - 가상기업 학습자료: `/materials/virtual-company.pdf`
 - 산업안전·중대재해: `/materials/workplace-safety.pdf`
 - 화학물질관리법: `/materials/chemical-management.pdf`
 - 대기환경보전법: `/materials/air-environment.pdf`
+- 황산 실습용 MSDS: `/materials/sulfuric-acid-msds.pdf`
+- 염산 실습용 MSDS: `/materials/hydrochloric-acid-msds.pdf`
+- 암모니아 실습용 MSDS: `/materials/ammonia-msds.pdf`
+- 산업안전보건기준에 관한 규칙(2026.03.02 시행본, 제450호): `/materials/occupational-safety-rules-20260302.pdf`
+
+MSDS는 원본에 교육·실습용 편집본임이 명시된 파일입니다. 규칙의 시행일은 제공된 PDF에 적힌 버전을 표시하며, 자동으로 최신 법령으로 교체하지 않습니다.
 
 원본은 `public/materials/`, 표시 이름·쪽수·용량은 `lib/materials.ts`에 있습니다. 파일 교체 시 목록 정보도 함께 갱신하세요. 이 자료는 GitHub에 포함되는 정적 파일이므로 자정 삭제나 채팅 초기화에 영향을 받지 않습니다. 강사용 해설은 공개 자료에 포함하지 않습니다.
 
