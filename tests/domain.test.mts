@@ -131,6 +131,9 @@ test('a signed student selects only their own character and it survives chat res
   const view = snapshot(room, today(), 'two', 'local');
   assert.deepEqual(view.seats.map(seat => seat.character), ['cat', 'sprout']);
   assert.equal('characters' in view, false);
+  mutate(room, { ...change, character: 'axolotl' }, 'one', false);
+  mutate(room, { type: 'room-reset', target: 'chat' }, null, true);
+  assert.deepEqual(snapshot(room, today(), 'two', 'local').seats.map(seat => seat.character), ['axolotl', 'sprout']);
   mutate(room, { type: 'active', active: false }, null, true);
   assert.throws(() => mutate(room, change, 'one', false), /강의실에 입장/);
 });
