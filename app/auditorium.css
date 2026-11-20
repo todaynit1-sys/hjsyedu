@@ -1,0 +1,258 @@
+.live-room > .live-header { position: relative; z-index: 200; }
+.room-view-workspace { isolation: isolate; }
+.classroom-workspace .classroom-pane > .auditorium-scene {
+  position: relative;
+  flex: 1 0 auto;
+  min-height: auto;
+  padding: 0 0 5px;
+  border: 0;
+  border-radius: 12px;
+  background: #fffaf1;
+  color: #243b57;
+}
+.auditorium-viewport {
+  --overview-min-height: clamp(340px, 34vw, 480px);
+  position: relative; display: grid; place-items: center; width: 100%;
+  height: clamp(var(--overview-min-height), calc(100dvh - 285px), 880px);
+  min-height: var(--overview-min-height); flex: 1 0 auto; overflow: auto; overscroll-behavior: auto;
+  scrollbar-width: thin; border-radius: 12px; background: #ecd7bc;
+}
+.auditorium-scene .classroom-floor {
+  position: relative; display: block; flex: none; container-type: size;
+  width: 100%;
+  height: 100%; min-height: 0; isolation: isolate;
+  background: #e6d4bd;
+}
+.auditorium-viewport[data-view="near"] { display: block; }
+.auditorium-viewport[data-view="near"] > .classroom-floor { width: max(100%, 1280px); height: auto; min-width: 1280px; min-height: 800px; aspect-ratio: 8 / 5; }
+.auditorium-backdrop {
+  position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%;
+  object-fit: fill; pointer-events: none; visibility: hidden;
+}
+.classroom-floor[data-backdrop] .auditorium-backdrop { visibility: visible; }
+/* Lift the illustrated lectern in front of the instructor without moving either anchor. */
+.classroom-floor[data-backdrop]::after {
+  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: url('/classroom/storybook-classroom.jpg') center / 100% 100%;
+  clip-path: polygon(23.1% 28.2%, 26.2% 27.1%, 27% 25%, 30.1% 24.1%,
+    29.8% 26.8%, 30.6% 27.6%, 30.3% 35.3%, 25.1% 37.1%, 23.3% 35.8%);
+}
+.auditorium-world, .auditorium-art { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: -1; }
+.auditorium-world { opacity: 0; }
+.auditorium-world[data-ready="true"] { opacity: 1; }
+.auditorium-stage.world-screen {
+  position: absolute; z-index: 150; padding: 0; background: transparent;
+  border-radius: 0; min-width: 0;
+}
+.world-screen .classroom-board {
+  width: 100%; margin: 0; height: var(--screen-height, 130px);
+  padding: 7px 18px; border: 0; border-radius: 2px; color: #fff9e9;
+  background-color: #21473f;
+  background-image: radial-gradient(ellipse at 26% 24%, #4d736862, transparent 62%),
+    radial-gradient(ellipse at 65% 70%, #3e65572f, transparent 58%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath fill='%23fff' opacity='.17' d='M0 0h96v96H0z' filter='url(%23grain)'/%3E%3C/svg%3E");
+  box-shadow: inset 0 2px 12px #102e29ad, inset 0 0 28px #193c3250;
+}
+.world-screen .fitted-chalkboard[data-expanded] { height: auto; }
+.classroom-floor[data-backdrop] .world-screen .classroom-board { background: none; box-shadow: none; }
+.classroom-floor[data-backdrop] .world-screen .chalkboard-tray { display: none; }
+.world-screen .classroom-board-content p { font-size: clamp(18px, 2.7vw, 40px); line-height: 1.38; }
+.classroom-floor[data-backdrop] .world-screen [data-welcome] .classroom-board-welcome {
+  font-size: clamp(16px, 3.15cqw, 54px);
+  font-weight: 850; line-height: 1.23; letter-spacing: -.045em;
+  text-shadow: 0 2px 0 #204a43, .03em 0 #fff5d94d;
+}
+.world-screen .classroom-board-content a { font-size: 13px; }
+.chalkboard-emphasis { color: #ffe8a0; }
+.chalkboard-drawing { display: none; position: absolute; color: #c1e4da; pointer-events: none; opacity: .7; }
+.chalkboard-leaves { color: #e0e7ad; }
+.chalkboard-tray { display: none; position: absolute; inset: auto 3% 0; height: 5px; border-radius: 1px;
+  background: linear-gradient(180deg,#b98259,#865438); pointer-events: none; }
+.chalkboard-tray i { position: absolute; bottom: 4px; width: 15px; height: 4px; border-radius: 2px;
+  background: #f5ead7; box-shadow: 0 1px 2px #182b28a1; transform: rotate(-4deg); }
+.chalkboard-tray i:first-child { left: 7%; width: 24px; height: 6px; background: #e1aa56; }
+.chalkboard-tray i:nth-child(2) { left: 13%; background: #bddaf4; transform: rotate(5deg); }
+.chalkboard-tray i:last-child { right: 8%; background: #d6e5ae; }
+@container (min-width: 640px) {
+  .world-screen [data-welcome] .classroom-board-content { width: 79%; margin-inline: auto; }
+  .chalkboard-drawing { display: block; width: min(12%, 100px); height: 70%; top: 13%; }
+  .chalkboard-globe { left: 1.8%; transform: rotate(-7deg); }
+  .chalkboard-trees { right: 1.8%; transform: rotate(5deg); }
+  .chalkboard-emphasis { position: relative; display: inline-block; }
+  .chalkboard-emphasis::after { content: ""; position: absolute; inset: auto 4% 0 2%; height: 6px;
+    border-bottom: 3px solid #ffe8a0; border-radius: 50%; transform: rotate(-3deg); opacity: .84; }
+  .chalkboard-tray { display: block; }
+}
+.auditorium-stage.world-screen.is-expanded {
+  position: relative; left: auto !important; top: auto !important;
+  width: 100% !important; height: auto; flex: none; margin: 10px auto;
+}
+.auditorium-stage.is-expanded .classroom-board {
+  padding: 18px 24px; border: 5px solid #a46f4b; border-radius: 8px;
+}
+.auditorium-scene .classroom-seats {
+  position: absolute; inset: 0; display: block; width: 100%; height: 100%;
+  min-height: 0; padding: 0; margin: 0; z-index: auto;
+}
+.auditorium-scene .classroom-seat {
+  position: absolute; display: block;
+  min-width: 0; height: auto; min-height: 0; transform: translate(-50%, -86%);
+  pointer-events: none;
+}
+.auditorium-scene .classroom-desk-wrap { display: block; height: auto; min-height: 0; }
+.auditorium-scene .classroom-desk { width: 100%; height: auto; max-height: none; filter: drop-shadow(0 2px 2px #40271942); }
+.auditorium-scene .classroom-empty-chair { fill: #759dc6; stroke: #375c81; }
+.auditorium-scene .classroom-seat .classroom-desk-front { fill: #edc396; stroke: #8c613e; }
+.auditorium-scene .classroom-seat.is-mine .classroom-desk-front { fill: #f4d5ae; stroke: #4656a5; }
+.auditorium-scene .classroom-desk text { font-size: 11px; }
+.auditorium-scene[data-world="ready"] .auditorium-seat-base,
+.auditorium-scene[data-world="ready"] .classroom-desk > text { display: none; }
+.auditorium-seat-caption {
+  position: absolute; top: 88%; left: 50%; transform: translateX(-50%);
+  display: block; max-width: 86px; padding: 1px 4px; border-radius: 4px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #263451;
+  background: #fffffff0; font-size: 10px; line-height: 1.3; pointer-events: none;
+}
+.classroom-seat:not(.is-occupied) .auditorium-seat-caption { display: none; }
+.classroom-seat.is-mine .auditorium-seat-caption { background: #e8f7ff; outline: 1px solid #4485bd; }
+.auditorium-scene .classroom-desk-hit { min-width: 44px; min-height: 44px; width: 100%; border-radius: 12px; pointer-events: auto; }
+.auditorium-scene .classroom-seat-bubble { max-width: 135px; min-width: 65px; width: max-content; font-size: 12px; padding: 5px 8px; bottom: calc(100% - 4px); border-color: #789fc4; background: #fffefb; }
+.auditorium-scene .classroom-actor {
+  position: absolute; display: block; width: max(20px, var(--actor-scale, clamp(31px, 7.4cqw, 97px)));
+  aspect-ratio: 60 / 66; color: var(--desk-ink); pointer-events: none;
+  transform: translate(-50%, -94%);
+}
+.auditorium-scene .classroom-actor.is-instructor {
+  --actor-scale: clamp(25px, 4.8cqw, 65px);
+}
+.classroom-actor.is-instructor > .classroom-walker-greet {
+  left: 50%; right: auto; width: max(100%, 44px); transform: translateX(-50%);
+}
+.classroom-actor > .classroom-actor-sprite {
+  position: absolute; inset: 0; display: block; width: 100%; height: 100%;
+  animation: none; overflow: visible; transform-origin: 50% 94%;
+  scale: var(--actor-depth); transition: scale 180ms ease-out;
+}
+.classroom-floor:has(> canvas[data-avatars="true"]) .classroom-actor-sprite,
+.classroom-actor[data-illustrated] > .classroom-actor-sprite { visibility: hidden; }
+.classroom-floor:has(> canvas[data-avatars="true"]) .classroom-actor.is-mine:not([data-at-lectern])::before,
+.classroom-actor.is-mine[data-illustrated]:not([data-at-lectern])::before {
+  content: ""; position: absolute; inset: auto 14% 0; height: 9%;
+  border: 1.5px solid #e8fbff; border-radius: 50%;
+  box-shadow: 0 0 0 1px #4fcbef, 0 0 8px #71dcf9a0; background: #71dcf925;
+}
+@property --actor-depth {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 1;
+}
+.storybook-actor-art {
+  position: absolute; inset: auto -14% 6%; height: 123%; pointer-events: none;
+  visibility: hidden; transform-origin: 50% 100%; scale: var(--actor-depth);
+  transition: transform 160ms ease-in-out, clip-path 140ms ease;
+}
+.classroom-actor[data-illustrated] .storybook-actor-art { visibility: visible; }
+.storybook-gait { position: absolute; inset: 0; transform-origin: 50% 100%; }
+.storybook-actor-art [data-frame] {
+  display: block; position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; transition: opacity 110ms linear;
+}
+.classroom-actor[data-pose="standing"] .storybook-actor-art [data-frame="idle"],
+.classroom-actor[data-pose="seated"] .storybook-actor-art [data-frame="seated"] { opacity: 1; }
+.classroom-actor[data-pose="standing"][data-facing="left"] .storybook-actor-art { transform: perspective(240px) rotateY(180deg); }
+.classroom-actor[data-seat-side="left"] .storybook-actor-art [data-frame="seated"] { transform: scaleX(-1); }
+.storybook-actor-art [data-frame="seated"] {
+  inset: auto 0 5%; height: 72%; clip-path: inset(0 0 30%);
+}
+.storybook-actor-art [data-frame="seated"][data-creature] {
+  inset: auto 0 18%; height: 100%; clip-path: none;
+}
+.classroom-actor[data-at-lectern]:not([data-travelling]) .storybook-actor-art { clip-path: inset(0 0 29%); }
+@media (prefers-reduced-motion: no-preference) {
+  .classroom-actor[data-pose="standing"][data-walking] .storybook-gait {
+    animation: storybook-weight var(--storybook-cycle, 600ms) ease-in-out infinite;
+  }
+  .classroom-actor:not(.is-instructor, [data-creature]) .storybook-gait {
+    --storybook-frame-ease: step-end;
+  }
+  .classroom-actor[data-pose="standing"][data-walking] .storybook-gait:has([data-frame="step"][data-art-ready]):has([data-frame="step-back"][data-art-ready]) [data-frame] {
+    transition: none;
+  }
+  .classroom-actor[data-pose="standing"][data-walking] .storybook-gait:has([data-frame="step"][data-art-ready]):has([data-frame="step-back"][data-art-ready]) [data-frame="idle"] {
+    animation: storybook-idle var(--storybook-cycle, 600ms) var(--storybook-frame-ease, linear) infinite;
+  }
+  .classroom-actor[data-pose="standing"][data-walking] .storybook-gait:has([data-frame="step"][data-art-ready]):has([data-frame="step-back"][data-art-ready]) :is([data-frame="step"], [data-frame="step-back"]) {
+    animation: storybook-step var(--storybook-cycle, 600ms) var(--storybook-frame-ease, linear) infinite;
+  }
+  .classroom-actor[data-pose="standing"][data-walking] .storybook-gait:has([data-frame="step"][data-art-ready]):has([data-frame="step-back"][data-art-ready]) [data-frame="step-back"] {
+    animation-delay: calc(var(--storybook-cycle, 600ms) / -2);
+  }
+}
+@keyframes storybook-idle {
+  0%, 47%, 50%, 97%, 100% { opacity: 1; }
+  7%, 40%, 57%, 90% { opacity: 0; }
+}
+@keyframes storybook-step {
+  0%, 47%, 100% { opacity: 0; }
+  7%, 40% { opacity: 1; }
+}
+@keyframes storybook-weight {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  24% { transform: translateY(-2%) rotate(-1.6deg); }
+  50% { transform: translateY(0) rotate(0deg); }
+  74% { transform: translateY(-2%) rotate(1.6deg); }
+}
+.classroom-actor[data-facing="left"][data-pose="standing"] .classroom-actor-sprite { transform: scaleX(-1); }
+.classroom-actor .classroom-actor-body { transform-origin: 45px 50px; transition: transform 145ms ease-out; }
+.classroom-actor :is(.classroom-actor-legs, .classroom-actor-standing-arms, .classroom-actor-seated-arms, .classroom-actor-shadow) {
+  transition: opacity 120ms ease-out;
+}
+.classroom-actor[data-pose="seated"] .classroom-actor-body { transform: translateY(7px) rotate(-4deg); }
+.classroom-actor[data-pose="seated"] :is(.classroom-actor-legs, .classroom-actor-standing-arms, .classroom-actor-shadow),
+.classroom-actor[data-pose="standing"] .classroom-actor-seated-arms { opacity: 0; }
+.classroom-actor[data-pose="seated"] .classroom-actor-ring { opacity: .7; }
+.classroom-actor[data-walking] .walker-foot { animation: walker-step 230ms ease-in-out infinite alternate; }
+.classroom-actor[data-walking] .walker-foot.right { animation-direction: alternate-reverse; }
+@keyframes walker-step { from { transform: translateY(1px); } to { transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) {
+  .classroom-actor[data-walking] .walker-foot { animation: none; }
+  .storybook-actor-art, .storybook-actor-art [data-frame] { transition: none; }
+  .classroom-actor .classroom-actor-sprite, .classroom-actor .classroom-actor-body,
+  .classroom-actor :is(.classroom-actor-legs, .classroom-actor-standing-arms, .classroom-actor-seated-arms, .classroom-actor-shadow) { transition: none; }
+}
+.auditorium-scene .classroom-walker-name {
+  position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+  width: max-content; max-width: 100px; font-size: 10px;
+}
+.classroom-actor[data-pose="seated"] .classroom-walker-name { display: none; }
+.classroom-actor.is-instructor .classroom-walker-name { background: #224661; color: #fff; }
+.auditorium-scene .classroom-activity-badge { top: -4px; right: -5px; }
+.auditorium-scene .classroom-seating-footer { flex: none; margin: 6px 7px 0; min-height: 44px; }
+.auditorium-scene .classroom-character-trigger { min-height: 44px; border-radius: 11px; border-color: #cbd9e7; background: #fffdf9; color: #254164; }
+.auditorium-scene .classroom-own-seat { color: #354d7b; }
+.auditorium-scene .classroom-student-count, .auditorium-scene .classroom-move-hint { color: #506780; }
+.classroom-move-mode {
+  min-height: 44px; padding: 6px 8px; border: 1px solid #a8bed6;
+  border-radius: 8px; background: #fff; color: #25486c; font: inherit;
+  font-size: 13px; font-weight: 700;
+}
+.classroom-move-mode:disabled { opacity: .65; }
+.auditorium-viewport:focus-visible, .classroom-move-mode:focus-visible { outline: 2px solid #3157a0; outline-offset: -2px; }
+@media (min-width: 761px) {
+  .classroom-workspace .classroom-pane > .auditorium-scene { min-height: 100%; }
+  .auditorium-viewport { height: 0; min-height: 300px; flex: 1 1 0; }
+}
+@media (max-width: 760px) {
+  .auditorium-viewport { height: auto; min-height: 0; display: block; flex: none; }
+  .auditorium-scene .classroom-floor { width: 100%; height: auto; min-height: 0; aspect-ratio: 4 / 3; }
+  .auditorium-viewport[data-view="near"] { height: clamp(240px, calc(100dvh - 345px), 520px); }
+  .auditorium-viewport[data-view="near"] > .classroom-floor { width: 1280px; min-width: 1280px; min-height: 800px; }
+  .auditorium-scene .classroom-seat-bubble { font-size: 10px; min-width: 54px; max-width: 90px; }
+  .auditorium-viewport[data-view="overview"] .classroom-seat:not(.is-mine) .auditorium-seat-caption { display: none; }
+  .world-screen .classroom-board { padding: 3px 6px; }
+  .world-screen .classroom-board-content p { font-size: 18px; }
+}
+@media (max-width: 420px) {
+  .world-screen .classroom-board-content .classroom-board-welcome { font-size: .9375rem; line-height: 1.15; }
+}
+

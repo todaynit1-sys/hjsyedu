@@ -1,7 +1,7 @@
 import { Check, Copy, Mail } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-const CONTACT_EMAIL = 'todaynit1@gmail.com';
+import { CONTACT_EMAIL } from '../lib/brand';
 
 export function ContactLink() {
   const [copied, setCopied] = useState(false); const [error, setError] = useState('');

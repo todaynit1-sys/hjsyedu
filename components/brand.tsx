@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, X } from 'lucide-react';
 import { api } from '../lib/client';
 import { MAIN_ROOM_CODE } from '../lib/types';
-import { APP_NAME, BRAND_MARK } from '../lib/brand';
+import { APP_NAME, APP_SUBTITLE, BRAND_MARK_LIGHT } from '../lib/brand';
 
 export function Brand({ roomCode = MAIN_ROOM_CODE, hostAccess = true }: { roomCode?: string; hostAccess?: boolean }) {
   const taps = useRef({ count: 0, last: 0 });
   const [signIn, setSignIn] = useState(false);
-  const symbol = <img className="brand-mark" src={BRAND_MARK} width="34" height="34" alt={`${APP_NAME} 로고`} />;
-  const wordmark = <span className="brand-wordmark"><span className="brand-title">{APP_NAME}</span><small>실시간 강의실</small></span>;
+  const symbol = <img className="brand-mark" src={BRAND_MARK_LIGHT} width="34" height="34" alt={`${APP_NAME} 로고`} />;
+  const wordmark = <span className="brand-wordmark"><span className="brand-title">{APP_NAME}</span><small>{APP_SUBTITLE}</small></span>;
   function tapSymbol() {
     const now = Date.now();
     taps.current.count = now - taps.current.last > 5000 ? 1 : taps.current.count + 1;

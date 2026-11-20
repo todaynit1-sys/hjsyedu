@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, BookOpen, Check, ClipboardList, Copy, Download, ExternalLink, FileSpreadsheet, FileText, Link2, LogOut, MessageCircle, MoreHorizontal, Paperclip, Pin, Plus, QrCode, RotateCcw, Send, Settings2, Trash2, Users, WifiOff, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, BookOpen, Check, ClipboardList, Copy, Download, ExternalLink, FileSpreadsheet, FileText, Link2, LocateFixed, LogOut, Maximize, MessageCircle, MoreHorizontal, Paperclip, Pin, Plus, Presentation, QrCode, RotateCcw, Send, Settings2, Trash2, Users, WifiOff, X } from 'lucide-react';
 import { ClassroomScene } from './classroom-scene';
-import { ClassroomMood } from './classroom-mood';
+import { ClassroomQuestion } from './classroom-activities';
+import { ClassroomAlerts } from './classroom-alerts';
 import { ClassroomPolls } from './classroom-polls';
 import { Brand } from './brand';
 import { AboutLink } from './about-link';
 import { BRAND_MARK } from '../lib/brand';
 import { ContactLink } from './contact-link';
-import { ResetDialog, RESET_LABELS } from './reset-dialog';
+import { ResetDialog } from './reset-dialog';
 import { NewPoll } from './poll-card';
 import { PollManagementDialog } from './poll-management-dialog';
 import { ShareDialog } from './share-dialog';
@@ -15,7 +16,9 @@ import { MaterialsDialog } from './materials-dialog';
 import { api, dateLabel, timeLabel, uploadFile } from '../lib/client';
 import { fileSize, MAX_FILE_BYTES } from '../lib/files';
 import { SURVEY_RESPONSES_URL, SURVEY_URL } from '../lib/survey';
-import type { PublicMessage, ResetTarget, Snapshot } from '../lib/types';
+import type { ClassroomMove, PublicMessage, ResetTarget, Snapshot } from '../lib/types';
+import '../app/view-tabs.css';
+import '../app/classroom-theme.css';
 
 function MessageText({ text }: { text: string }) {
   return <>{text.split(/(https?:\/\/[^\s<>]+)/g).map((part, i) => /^https?:\/\//.test(part) ? <a key={i} href={part} target="_blank" rel="noopener noreferrer">{part}</a> : part)}</>;
@@ -24,9 +27,8 @@ function ChatMessage({ code, message, host, editable, busy, onAction, onNotice }
   const [confirming, setConfirming] = useState(false);
   const teacher = message.author !== 'student'; const mine = message.mine || (host && teacher);
   async function copy() { try { await navigator.clipboard.writeText(message.url ?? message.text); onNotice('복사했어요.'); } catch { onNotice('내용을 선택해서 복사해주세요.'); } }
-  return <article className={`chat-message ${mine ? 'my-message' : ''} ${teacher ? 'teacher-message' : ''}`}>
-    {!mine && <span className="chat-avatar" aria-hidden="true">{teacher ? <span>강</span> : <span>수</span>}</span>}
-    <div className="chat-message-body"><div className="chat-meta"><b>{message.authorName ?? '강사'}</b>{teacher && <span>강사</span>}<time dateTime={message.createdAt}>{timeLabel(message.createdAt)}</time></div>
+  return <article className={`chat-message ${mine ? 'my-message' : ''} ${teacher ? 'teacher-message' : ''}`} data-message-id={message.id} tabIndex={-1}>
+    <div className="chat-message-body"><div className="chat-meta"><b>{message.authorName ?? '강사'}</b>{mine && <span>나</span>}<time dateTime={message.createdAt}>{timeLabel(message.createdAt)}</time></div>
       <div className="chat-bubble"><p><MessageText text={message.text} /></p>{message.url && <a className="chat-link" href={message.url} target="_blank" rel="noopener noreferrer"><Link2 size={16} /><span>{new URL(message.url).hostname.replace('www.', '')}</span><ExternalLink size={14} /></a>}{message.attachment && <a className="chat-file" href={`/api/rooms/${code}/files/${message.attachment.id}`} download={message.attachment.name} aria-label={`${message.attachment.name} 다운로드`}><FileText size={22} aria-hidden="true" /><span><b>{message.attachment.name}</b><small>{fileSize(message.attachment.size)} · 오늘만 다운로드</small></span><Download size={18} aria-hidden="true" /></a>}</div>
       <details className="message-menu"><summary aria-label={`${message.text.slice(0, 20)} 메시지 메뉴`}><MoreHorizontal size={17} /></summary><div><button onClick={copy}><Copy size={14} />복사</button>{host && editable && <><button disabled={busy} onClick={() => onAction({ type: 'pin', id: message.id }, message.pinned ? '고정을 해제했어요.' : '메시지를 고정했어요.')}><Pin size={14} />{message.pinned ? '고정 해제' : '상단 고정'}</button><button disabled={busy} onClick={() => setConfirming(true)}><Trash2 size={14} />삭제</button></>}</div></details>
       {confirming && <div className="chat-delete" role="alert"><span>이 메시지를 삭제할까요?</span><button disabled={busy} onClick={() => onAction({ type: 'delete', id: message.id }, '메시지를 삭제했어요.')}>삭제하기</button><button onClick={() => setConfirming(false)}>취소</button></div>}
@@ -70,7 +72,16 @@ function QuestionDialog({ busy, onAction, onClose }: { busy: boolean; onAction: 
 export function RoomView({ code, host, onBack, onLogout }: { code: string; host: boolean; onBack?: () => void; onLogout?: () => Promise<void> }) {
   const [data, setData] = useState<Snapshot | null>(null); const [date, setDate] = useState(''); const [error, setError] = useState(''); const [connected, setConnected] = useState(true); const [busy, setBusy] = useState(false);
   const [share, setShare] = useState(false); const [questions, setQuestions] = useState(false); const [tab, setTab] = useState<'all' | 'links'>('all'); const [notice, setNotice] = useState(''); const [unread, setUnread] = useState(false);
-  const [mobileView, setMobileView] = useState<'classroom' | 'chat'>('classroom');
+  const [view, setView] = useState<'classroom' | 'chat'>('classroom');
+  const [sceneView, setSceneView] = useState<'overview' | 'near'>('overview');
+  const [nearRequest, setNearRequest] = useState(0);
+  const [hasNewChat, setHasNewChat] = useState(false);
+  const observedChat = useRef<{ date: string; id?: string } | null>(null);
+  const observedAlerts = useRef<{ day: string; messages: Set<string> } | null>(null);
+  const [messageAlert, setMessageAlert] = useState<string>();
+  const [dismissedQuestionCard, setDismissedQuestionCard] = useState<string>();
+  const [questionOpen, setQuestionOpen] = useState(false);
+  const [chatTarget, setChatTarget] = useState<string>();
   const [pollView, setPollView] = useState<'custom' | 'history' | null>(null);
   const [resetTarget, setResetTarget] = useState<ResetTarget | null>(null);
   const [managedPollId, setManagedPollId] = useState<string | null>(null);
@@ -80,7 +91,10 @@ export function RoomView({ code, host, onBack, onLogout }: { code: string; host:
     const viewport = window.visualViewport;
     if (!viewport) return;
     function fitKeyboard() {
-      if (viewport?.scale === 1) roomRef.current?.style.setProperty('--visible-room-height', `${viewport.height}px`);
+      const room = roomRef.current;
+      if (!room || viewport?.scale !== 1) return;
+      room.style.setProperty('--visible-room-height', `${viewport.height}px`);
+      room.toggleAttribute('data-compact-viewport', viewport.height <= 500);
     }
     fitKeyboard();
     viewport.addEventListener('resize', fitKeyboard);
@@ -89,17 +103,33 @@ export function RoomView({ code, host, onBack, onLogout }: { code: string; host:
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null); const scroller = useRef<HTMLDivElement>(null); const nearBottom = useRef(true); const forceBottom = useRef(false);
   function notify(message: string) { setNotice(message); if (noticeTimer.current) clearTimeout(noticeTimer.current); noticeTimer.current = setTimeout(() => setNotice(''), 4000); }
   useEffect(() => () => { if (noticeTimer.current) clearTimeout(noticeTimer.current); }, []);
-  useEffect(() => { let stopped = false; api<Snapshot>(`/api/rooms/${code}`, { type: host ? 'start-day' : 'join' }).then(value => { if (!stopped) { setData(value); setDate(value.date); setError(''); } }).catch(e => { if (!stopped) setError(e.message); }); return () => { stopped = true; }; }, [code, host]);
+  useEffect(() => {
+    let stopped = false;
+    // Reset the robot on room entry, rather than during the live reconnect below.
+    api<Snapshot>(`/api/rooms/${code}`, host ? { type: 'start-day', dockInstructor: true } : { type: 'join' })
+      .then(value => { if (!stopped) { setData(value); setDate(value.date); setError(''); } })
+      .catch(e => { if (!stopped) setError(e.message); });
+    return () => { stopped = true; };
+  }, [code, host]);
   useEffect(() => {
     if (!date) return;
     let stopped = false; let socket: WebSocket | null = null; let retry = 0; let lastSignal = Date.now();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let ping: ReturnType<typeof setInterval> | undefined;
-    function connect() {
+    async function connect() {
       if (stopped) return;
       const url = new URL(`/api/rooms/${code}/live`, window.location.href);
       url.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      socket = new WebSocket(url);
+      try {
+        if (window.location.hostname === 'hjsyedu.vercel.app') {
+          const access = await api<{ ticket: string; socketUrl: string }>(`/api/rooms/${code}/live-ticket`, { type: 'connect' });
+          if (stopped) return;
+          socket = new WebSocket(access.socketUrl, ['classroom-live', `classroom-auth.${access.ticket}`]);
+        } else socket = new WebSocket(url);
+      } catch {
+        if (!stopped) { setConnected(false); setError('실시간 연결을 다시 준비하고 있어요.'); timer = setTimeout(connect, Math.min(10_000, 500 * 2 ** retry++)); }
+        return;
+      }
       socket.onopen = () => { retry = 0; lastSignal = Date.now(); setConnected(true); setError(''); ping = setInterval(() => { if (Date.now() - lastSignal > 70_000) socket?.close(); else if (socket?.readyState === WebSocket.OPEN) socket.send('ping'); }, 30_000); };
       socket.onmessage = event => {
         lastSignal = Date.now();
@@ -125,6 +155,16 @@ export function RoomView({ code, host, onBack, onLogout }: { code: string; host:
   }, [code, date, host]);
   const action = useCallback(async (input: Record<string, unknown>, success: string) => { setBusy(true); try { const value = await api<Snapshot>(`/api/rooms/${code}`, { ...input, date }); if (input.type === 'message') forceBottom.current = true; setData(value); setConnected(true); setError(''); notify(success); } catch (e) { setError((e as Error).message); throw e; } finally { setBusy(false); } }, [code, date]);
   const safeAction = useCallback(async (input: Record<string, unknown>, success: string) => { try { await action(input, success); } catch { /* visible room error */ } }, [action]);
+  const moveCharacter = useCallback(async (move: ClassroomMove) => {
+    const value = await api<Snapshot>(`/api/rooms/${code}`, {
+      type: host ? 'instructor-move' : 'move', date, ignoreLegacyQuiz: true, ...(move === 'wander' ? {wander: true} : {position: move})
+    });
+    setData(current => !current || (current.code === value.code && current.date === value.date && Date.parse(value.updatedAt) >= Date.parse(current.updatedAt)) ? value : current);
+  }, [code, date, host]);
+  const classroomActivity = useCallback(async (input: Record<string, unknown>) => {
+    const value = await api<Snapshot>(`/api/rooms/${code}`, { ...input, date });
+    setData(current => !current || (current.code === value.code && current.date === value.date && Date.parse(value.updatedAt) >= Date.parse(current.updatedAt)) ? value : current);
+  }, [code, date]);
   const attachFile = useCallback(async (file: File, id: string, caption: string, url: string) => {
     setBusy(true);
     try {
@@ -135,14 +175,80 @@ export function RoomView({ code, host, onBack, onLogout }: { code: string; host:
   const messages = data?.messages.filter(m => tab === 'all' || m.url || /https?:\/\//.test(m.text)) ?? []; const lastId = messages.at(-1)?.id;
   function scrollLatest() { const element = scroller.current; if (element) element.scrollTop = element.scrollHeight; nearBottom.current = true; setUnread(false); }
   useEffect(() => { nearBottom.current = true; setUnread(false); }, [date, tab]);
-  useEffect(() => { if (nearBottom.current || forceBottom.current) { scrollLatest(); forceBottom.current = false; } else setUnread(true); }, [lastId, date, tab, mobileView]);
+  useEffect(() => { if (nearBottom.current || forceBottom.current) { scrollLatest(); forceBottom.current = false; } else setUnread(true); }, [lastId, date, tab, view]);
+  useEffect(() => {
+    if (!data) return;
+    const latest = data.messages.at(-1);
+    const previous = observedChat.current;
+    if (view === 'chat' || !latest || previous?.date !== data.date) setHasNewChat(false);
+    else if (previous && previous.id !== latest.id && (!previous.id || data.messages.some(message => message.id === previous.id))
+      && !latest.mine && !(host && latest.author !== 'student')) setHasNewChat(true);
+    observedChat.current = { date: data.date, id: latest?.id };
+  }, [data, view, host]);
+  useEffect(() => {
+    if (!data || host) return;
+    const day = `${data.code}/${data.date}`;
+    const seen = observedAlerts.current;
+    if (seen?.day !== day) {
+      observedAlerts.current = {
+        day,
+        messages: new Set(data.messages.map(message => message.id))
+      };
+      setMessageAlert(undefined);
+      return;
+    }
+    let latest: PublicMessage | undefined;
+    for (const message of data.messages) {
+      if (!seen.messages.has(message.id) && message.author !== 'student') latest = message;
+      seen.messages.add(message.id);
+    }
+    if (latest) setMessageAlert(latest.id);
+  }, [data, host]);
+  useEffect(() => {
+    if (!messageAlert) return;
+    const timer = window.setTimeout(() => {
+      if (!document.activeElement?.closest('.classroom-alert[data-kind="message"]')) setMessageAlert(undefined);
+    }, 12000);
+    return () => window.clearTimeout(timer);
+  }, [messageAlert]);
+  useEffect(() => {
+    if (!chatTarget || view !== 'chat') return;
+    const element = scroller.current?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(chatTarget)}"]`);
+    element?.focus({ preventScroll: true });
+    element?.scrollIntoView({ block: 'nearest' });
+    setChatTarget(undefined);
+  }, [chatTarget, view]);
+  const alertMessage = data?.messages.find(message => message.id === messageAlert);
+  const round = data?.questionRound;
+  const joinedAsStudent = !host && Boolean(data?.seats.some(seat => seat.mine));
+  // The instructor only ever gets the results card, once answers are published.
+  const questionCardKey = round && (joinedAsStudent || host)
+    ? round.published && round.answers ? `${round.id}/results`
+      : !host && data?.active && round.open && round.myAnswer === null ? `${round.id}/question` : undefined
+    : undefined;
+  const alertQuestion = !questionOpen && questionCardKey && questionCardKey !== dismissedQuestionCard ? round : undefined;
+  function toggleQuestion(open: boolean) {
+    setQuestionOpen(open);
+    if (open && questionCardKey) setDismissedQuestionCard(questionCardKey);
+  }
+  function dismissQuestionCard() {
+    setDismissedQuestionCard(questionCardKey);
+    if (document.activeElement?.closest('.classroom-alert:is([data-kind="question"], [data-kind="results"])')) {
+      requestAnimationFrame(() => roomRef.current?.querySelector<HTMLButtonElement>('.classroom-question-trigger')?.focus({ preventScroll: true }));
+    }
+  }
   const pinned = data?.messages.find(m => m.pinned); const editable = Boolean(data && data.date === data.today); const active = Boolean(data?.active && editable && connected);
-  const moodPoll = data?.polls.find(poll => poll.kind === 'mood' && !poll.archived);
-  const customPolls = data?.polls.filter(poll => poll.kind !== 'mood' && !poll.archived) ?? [];
-  const previousPolls = data?.polls.filter(poll => poll.archived) ?? [];
-  const moodControl = moodPoll && <ClassroomMood key={moodPoll.id} poll={moodPoll} host={host} active={active} busy={busy}
-    onVote={option => action({ type: 'vote', pollId: moodPoll.id, option }, `${moodPoll.options[option]}로 응답했어요.`)} />;
-  const materialsButton = <button className="materials-button" onClick={() => setMaterials(true)} aria-label="참고자료 다운로드" aria-haspopup="dialog">
+  async function runQuestion(input: Record<string, unknown>) {
+    await classroomActivity(input);
+    if (input.type === 'question-start') notify('질문을 올렸어요.');
+  }
+  async function submitQuestionAnswer(roundId: string, text: string) {
+    await classroomActivity({ type: 'question-answer', roundId, text });
+    notify('답변을 보냈어요.');
+  }
+  const customPolls = data?.polls.filter(poll => poll.kind === 'custom' && !poll.archived) ?? [];
+  const previousPolls = data?.polls.filter(poll => poll.kind === 'custom' && poll.archived) ?? [];
+  const materialsButton = <button className="materials-button" onClick={() => setMaterials(true)} aria-label="참고자료 다운로드" title="참고자료" aria-haspopup="dialog">
     <BookOpen size={15} aria-hidden="true" /><span>참고자료</span>
   </button>;
   const roomControls = data && <div className="live-room-actions">
@@ -151,14 +257,13 @@ export function RoomView({ code, host, onBack, onLogout }: { code: string; host:
       <div className="settings-panel">
         <p className="daily-retention">오늘 {dateLabel(data.date)}<br />채팅·투표·첨부 자료는 한국 시간 자정에 초기화됩니다.</p>
         {host && active && <button onClick={() => setQuestions(true)} aria-haspopup="dialog"><Plus size={16} />새 투표 만들기</button>}
-        {host && active && moodPoll && <button onClick={() => setManagedPollId(moodPoll.id)} aria-haspopup="dialog"><Settings2 size={16} />컨디션 투표 관리</button>}
         {customPolls.length > 0 && <button onClick={() => setPollView('custom')} aria-haspopup="dialog"><ClipboardList size={16} />수업 투표 보기</button>}
         {previousPolls.length > 0 && <button onClick={() => setPollView('history')} aria-haspopup="dialog">이전 투표 결과 보기</button>}
         {host && !data.demo && <a href={SURVEY_RESPONSES_URL} target="_blank" rel="noopener noreferrer"><FileSpreadsheet size={16} />설문 응답 시트 보기</a>}
         {data.mode === 'local' && <p>로컬 미리보기입니다.</p>}
         {host && editable && <>
           <div className="room-reset-actions"><p>강사 초기화</p>
-            {(['chat', 'mood', 'break'] as const).map(target => <button key={target} disabled={busy || !connected} onClick={() => setResetTarget(target)}><RotateCcw size={14} />{RESET_LABELS[target]} 초기화</button>)}
+            <button disabled={busy || !connected} onClick={() => setResetTarget('chat')}><RotateCcw size={14} />채팅 초기화</button>
           </div>
           <button disabled={busy} onClick={() => safeAction({ type: 'active', active: !data.active }, data.active ? '오늘 강의를 종료했어요.' : '강의를 다시 시작했어요.')}>{data.active ? '오늘 강의 종료' : '강의 다시 시작'}</button>
         </>}
@@ -166,9 +271,27 @@ export function RoomView({ code, host, onBack, onLogout }: { code: string; host:
       </div>
     </details>
   </div>;
-  return <div className={`live-room${host ? ' is-host' : ''}`} ref={roomRef}>
+  const viewTools = data && <div className="classroom-view-tools">
+    <div className="classroom-switch" role="group" aria-label="강의실 화면 전환">
+      <button aria-pressed={view === 'classroom'} aria-controls="classroom-pane" onClick={() => setView('classroom')}><Presentation size={18} aria-hidden="true" />강의실</button>
+      <button aria-label="채팅" aria-pressed={view === 'chat'} aria-controls="chat-pane" aria-describedby={hasNewChat ? 'new-chat-hint' : undefined} onClick={() => setView('chat')}><MessageCircle size={18} aria-hidden="true" />채팅{hasNewChat && <span className="view-chat-badge" aria-hidden="true">새 메시지</span>}</button>
+    </div>
+    <div className="classroom-view-actions">
+      {view === 'classroom' && <div className="classroom-camera-tools" role="group" aria-label="교실 보기">
+        <button type="button" aria-label="전체 보기" title="전체 보기" aria-pressed={sceneView === 'overview'}
+          onClick={() => setSceneView('overview')}><Maximize size={16} aria-hidden="true" /><span>전체 보기</span></button>
+        <button type="button" aria-label="내 주변" title="내 주변" aria-pressed={sceneView === 'near'}
+          onClick={() => { setSceneView('near'); setNearRequest(request => request + 1); }}><LocateFixed size={16} aria-hidden="true" /><span>내 주변</span></button>
+      </div>}
+      <ClassroomQuestion data={data} host={host} open={questionOpen} onOpenChange={toggleQuestion}
+        onAction={active && (host || joinedAsStudent) ? runQuestion : undefined} />
+      {materialsButton}
+    </div>
+  </div>;
+  return <div className={`live-room classroom-themed${host ? ' is-host' : ''}`} ref={roomRef}>
     <a className="skip-link" href="#main">본문으로 건너뛰기</a>
     <header className="live-header"><Brand roomCode={code} hostAccess={!host} />
+      {viewTools}
       <div className="live-header-actions"><AboutLink />
         {data && !data.demo && <a className="survey-link" href={SURVEY_URL} target="_blank" rel="noopener noreferrer" aria-label="수업 설문 참여 (새 탭)"><ClipboardList size={15} /><span>수업 설문</span></a>}
         {host && <span className="live-role">강사</span>}
@@ -181,27 +304,22 @@ export function RoomView({ code, host, onBack, onLogout }: { code: string; host:
       {error ? <><p role="alert">{error}</p><button className="primary" onClick={() => window.location.reload()}>다시 연결</button><a href="/join">다른 강의실 참여</a></> : <p role="status">좌석과 채팅을 준비하고 있어요.</p>}
     </main> : <>
       {error && <div className="live-error" role="alert"><WifiOff size={17} /><span>{error}</span><button aria-label="오류 메시지 닫기" onClick={() => setError('')}><X size={16} /></button></div>}
-      <main id="main" className="classroom-workspace" data-view={mobileView}>
+      <main id="main" className="classroom-workspace room-view-workspace" data-view={view}>
         <h1 className="room-accessible-title">{data.title}</h1>
-        <div className="classroom-mobile-tools">
-          <div className="classroom-switch" role="group" aria-label="강의실 화면 전환">
-            <button aria-pressed={mobileView === 'classroom'} aria-controls="classroom-pane" onClick={() => setMobileView('classroom')}>교실</button>
-            <button aria-pressed={mobileView === 'chat'} aria-controls="chat-pane" onClick={() => setMobileView('chat')}>채팅</button>
-          </div>
-          {materialsButton}
-        </div>
-        <div id="classroom-pane" className="classroom-pane">
-          <ClassroomScene data={data} mood={moodControl} onCharacterChange={!host && active ? character => action({ type: 'character', character }, '내 캐릭터를 바꿨어요.') : undefined} />
+        <span id="new-chat-hint" className="sr-only" role="status">{hasNewChat ? '새 채팅 메시지가 있어요.' : ''}</span>
+        <div id="classroom-pane" className="classroom-pane" hidden={view !== 'classroom'}>
+          <ClassroomScene data={data} host={host} visible={view === 'classroom'} view={sceneView} nearRequest={nearRequest} onActivity={active ? classroomActivity : undefined} onAvatarChange={!host && active ? avatar => action({ type: 'avatar-customize', avatar }, '꾸민 캐릭터를 저장했어요.') : undefined}
+            onMove={active ? moveCharacter : undefined}
+            onNicknameChange={!host && active ? nickname => action({ type: 'nickname', nickname }, '닉네임을 저장했어요.') : undefined} />
           {(customPolls.length > 0 || (host && active)) && <div className="classroom-poll-tools">
             {customPolls.length > 0 && <button onClick={() => setPollView('custom')} aria-haspopup="dialog"><ClipboardList size={16} />수업 투표 {customPolls.length}개 보기</button>}
             {host && active && <button onClick={() => setQuestions(true)} aria-label="새 투표 만들기" aria-haspopup="dialog"><Plus size={16} />새 투표</button>}
           </div>}
         </div>
-        <section className="live-chat" id="chat-pane" aria-labelledby="chat-title">
+        <section className="live-chat" id="chat-pane" aria-labelledby="chat-title" hidden={view !== 'chat'}>
           <div className="live-chat-heading"><h2 id="chat-title"><MessageCircle size={20} />실시간 채팅</h2>
             <div className="chat-header-tools">
               <button className="classroom-link-filter" aria-label="링크만 보기" aria-pressed={tab === 'links'} onClick={() => setTab(tab === 'links' ? 'all' : 'links')}><Link2 size={14} />링크만</button>
-              {materialsButton}
             </div>
           </div>
           {pinned && <div className="chat-pinned"><Pin size={14} /><span>고정</span>{pinned.url ? <a href={pinned.url} target="_blank" rel="noopener noreferrer">{pinned.text}</a> : <p>{pinned.text}</p>}{pinned.url && <ExternalLink size={13} />}</div>}
@@ -221,9 +339,14 @@ export function RoomView({ code, host, onBack, onLogout }: { code: string; host:
           {unread && <button className="new-messages" onClick={scrollLatest}><ArrowDown size={15} />새 메시지 보기</button>}
         </section>
         <Composer host={host} busy={busy} active={active} onAction={action} onUpload={attachFile} />
+        {<ClassroomAlerts host={host} message={host ? undefined : alertMessage} question={alertQuestion}
+          onOpenChat={() => { setChatTarget(messageAlert); setMessageAlert(undefined); setTab('all'); setView('chat'); }}
+          onAnswerQuestion={active && joinedAsStudent ? submitQuestionAnswer : undefined}
+          onDismissMessage={() => setMessageAlert(undefined)}
+          onDismissQuestion={dismissQuestionCard} />}
+        <div className={`toast ${notice ? 'visible' : ''}`} role="status" aria-live="polite">{notice && <><Check size={17} /><span>{notice}</span></>}</div>
       </main>
     </>}
-    <div className={`toast ${notice ? 'visible' : ''}`} role="status" aria-live="polite">{notice && <><Check size={17} /><span>{notice}</span></>}</div>
     {materials && <MaterialsDialog onClose={() => setMaterials(false)} />}
     {share && <ShareDialog code={code} onClose={() => setShare(false)} />}
     {questions && <QuestionDialog busy={busy} onAction={action} onClose={() => setQuestions(false)} />}

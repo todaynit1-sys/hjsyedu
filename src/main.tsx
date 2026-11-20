@@ -6,6 +6,7 @@ import { MAIN_ROOM_CODE } from '../lib/types';
 import '../app/globals.css';
 import '../app/live-room.css';
 import '../app/corporate.css';
+import '../app/institute.css';
 import '../app/classroom-layout.css';
 const path = window.location.pathname.replace(/\/$/, '') || '/';
 const match = /^\/room\/([A-Z0-9]{6})$/.exec(path);

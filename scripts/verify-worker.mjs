@@ -64,8 +64,43 @@ try {
   const main = await Promise.all(Array.from({ length: 10 }, () => request('/api/rooms/HJSYAI', { type: 'join' })));
   assert(main.every(result => result.data.code === 'HJSYAI'));
   assert(main.every(result => result.data.title === 'AI전략연구소'));
+  // Vercel proxies HTTP, while authenticated live connections go directly to the Worker.
+  const vercelHeaders = { origin: 'https://hjsyedu.vercel.app', 'sec-fetch-site': 'same-origin' };
+  assert.equal((await request('/api/rooms/HJSYAI/live-ticket', { type: 'connect' }, undefined, vercelHeaders)).response.status, 401);
+  const ticket = await request('/api/rooms/HJSYAI/live-ticket', { type: 'connect' }, main[0].cookie, vercelHeaders);
+  assert.equal(ticket.response.status, 200);
+  const liveHeaders = { upgrade: 'websocket', origin: 'https://hjsyedu.vercel.app', 'sec-fetch-site': 'cross-site', 'sec-websocket-protocol': `classroom-live, classroom-auth.${ticket.data.ticket}` };
+  const directLive = await mf.dispatchFetch(origin + '/api/rooms/HJSYAI/live', { headers: liveHeaders });
+  assert.equal(directLive.status, 101); assert.equal(directLive.headers.get('sec-websocket-protocol'), 'classroom-live');
+  directLive.webSocket.accept(); sockets.push(directLive.webSocket);
+  assert.equal((await mf.dispatchFetch(origin + '/api/rooms/HJSYAI/live', { headers: { ...liveHeaders, origin: 'https://evil.test' } })).status, 403);
+  assert.equal((await request('/api/rooms/HJSYAI/live-ticket', { type: 'connect' }, main[0].cookie, { origin: 'https://evil.vercel.app' })).response.status, 403);
+  const hostTicket = await request('/api/rooms/HJSYAI/live-ticket', { type: 'connect' }, host, vercelHeaders);
+  assert.equal(hostTicket.response.status, 200);
   const code = (await request('/api/rooms', { title: '50명 동시 검증' }, host)).data.code;
   const path = `/api/rooms/${code}`;
+  const dockRequest = { type: 'start-day', dockInstructor: true };
+  const instructorMove = { type: 'instructor-move', position: { x: .5, y: .56 } };
+  const disconnectTeacher = async peer => {
+    peer.ws.close();
+    await until(async () => !(await request(path, undefined, host)).data.instructor, 'Instructor socket did not close');
+  };
+  assert.equal((await request(path, dockRequest)).response.status, 401);
+  for (const move of [instructorMove, { type: 'instructor-move', wander: true }]) {
+    const moved = await request(path, move, host);
+    assert.equal(moved.response.status, 200);
+    assert.equal((await request(path, { type: 'start-day' }, host)).response.status, 200);
+    const resumed = await connect(path, host);
+    await until(() => resumed.latest?.instructor, 'Instructor did not reconnect');
+    if (move.position) assert.deepEqual(resumed.latest.instructor.position, move.position);
+    else assert(resumed.latest.instructor.wanderSince);
+    await disconnectTeacher(resumed);
+    assert.equal((await request(path, dockRequest, host)).response.status, 200);
+    const docked = await connect(path, host);
+    await until(() => docked.latest?.instructor, 'Instructor did not reenter');
+    assert.deepEqual(docked.latest.instructor, {}, 'A fresh instructor entry clears earlier motion');
+    await disconnectTeacher(docked);
+  }
   const teacher = await connect(path, host);
   const students = [];
   for (let i = 0; i < 50; i++) {
@@ -75,7 +110,107 @@ try {
   await until(() => teacher.latest?.online === 50, '50 connections did not appear');
   assert.deepEqual(teacher.latest.seats.map(s => s.number), Array.from({ length: 50 }, (_, i) => i + 1));
   assert(teacher.latest.seats.every(s => !s.mine));
-  assert.deepEqual(teacher.latest.polls.map(p => p.kind), ['mood', 'break']);
+  assert.deepEqual(teacher.latest.polls.map(p => p.kind), ['mood']);
+  assert.deepEqual(teacher.latest.instructor, {});
+  assert.equal((await request(path, instructorMove, students[0].cookie)).response.status, 403);
+  assert.equal((await request(path, { ...instructorMove, position: { x: 2, y: .56 } }, host)).response.status, 400);
+  assert.equal((await request(path, instructorMove, host)).response.status, 200);
+  await until(() => students[0].peer.latest?.instructor?.position?.y === .56, 'Instructor movement did not broadcast');
+  assert.deepEqual((await request(path, { type: 'start-day' }, host)).data.instructor.position, instructorMove.position,
+    'Automatic reconnect preserves the live instructor position');
+  assert.deepEqual((await request(path, dockRequest, host)).data.instructor, {},
+    'Explicit entry docks the instructor even with another live host tab');
+  await until(() => teacher.latest?.instructor && !teacher.latest.instructor.position
+    && students[0].peer.latest?.instructor && !students[0].peer.latest.instructor.position,
+  'The new dock position did not reach the already connected host and students');
+  assert.equal(students[0].peer.latest.online, 50);
+  assert.equal(students[0].peer.latest.seats.length, 50);
+  const studentWander = { type: 'move', wander: true };
+  assert.equal((await request(path, studentWander, students[0].cookie)).response.status, 200);
+  await until(() => Boolean(students[1].peer.latest?.seats[0].wanderSince), 'Student wander did not broadcast');
+  assert.equal((await request(path, { type: 'instructor-move', wander: true }, host)).response.status, 200);
+  const quiz = await request(path, { type: 'quiz-start', question: '자율 이동이 OX 답을 고를까요?', answer: 'X' }, host);
+  assert.equal(quiz.response.status, 200);
+  assert.equal(quiz.data.seats[0].wanderSince, undefined);
+  assert.equal(quiz.data.instructor.wanderSince, undefined);
+  assert.equal((await request(path, studentWander, students[0].cookie)).response.status, 409);
+  const duringQuiz = await request(path, instructorMove, host);
+  assert.deepEqual(duringQuiz.data.quiz.counts, [0, 0]);
+  const newClientWander = await request(path, { ...studentWander, ignoreLegacyQuiz: true }, students[0].cookie);
+  assert.equal(newClientWander.response.status, 200);
+  assert(newClientWander.data.seats[0].wanderSince);
+  const newClientMove = await request(path, { type: 'move', ignoreLegacyQuiz: true, position: { x: .5, y: .56 } }, students[0].cookie);
+  assert.equal(newClientMove.response.status, 200);
+  assert.deepEqual(newClientMove.data.quiz.counts, [0, 0]);
+  await request(path, { type: 'move', ignoreLegacyQuiz: true, position: null }, students[0].cookie);
+  await request(path, { type: 'quiz-clear', quizId: quiz.data.quiz.id }, host);
+  await request(path, { type: 'instructor-move', position: null }, host);
+  await until(() => students[0].peer.latest?.instructor && !students[0].peer.latest.instructor.position, 'Instructor did not return to the board');
+
+  const startQuestion = { type: 'question-start', prompt: '오늘 가장 기억에 남은 내용은 무엇인가요?' };
+  assert.equal((await request(path, { ...startQuestion, viewerHost: true }, students[0].cookie)).response.status, 403);
+  assert.equal((await request(path, { ...startQuestion, prompt: '가'.repeat(161) }, host)).response.status, 400);
+  const started = await request(path, startQuestion, host);
+  assert.equal(started.response.status, 200);
+  const roundId = started.data.questionRound.id;
+  assert.deepEqual(started.data.questionRound, {
+    id: roundId, prompt: startQuestion.prompt, open: true, published: false, total: 0, myAnswer: null
+  });
+  assert.equal((await request(path, startQuestion, host)).response.status, 409);
+  const answer = { type: 'question-answer', roundId, text: '짧게 요약하기' };
+  assert.equal((await request(path, answer)).response.status, 401);
+  assert.equal((await request(path, answer, host)).response.status, 403);
+  assert.equal((await request(path, { ...answer, text: '가'.repeat(201) }, students[0].cookie)).response.status, 400);
+  assert.equal((await request(path, { ...answer, roundId: 'stale' }, students[0].cookie)).response.status, 409);
+  const firstAnswer = await request(path, answer, students[0].cookie);
+  assert.equal(firstAnswer.response.status, 200);
+  assert.equal(firstAnswer.data.questionRound.myAnswer, answer.text);
+  assert.equal(firstAnswer.data.questionRound.answers, undefined);
+  const changedText = '예시를 통해 이해한 내용';
+  const peerText = '질문과 답변을 정리하는 방법';
+  const edited = await request(path, { ...answer, text: ` ${changedText} `, name: '위조한 이름', seatNumber: 50 }, students[0].cookie);
+  assert.equal(edited.data.questionRound.myAnswer, changedText);
+  assert.equal(edited.data.questionRound.total, 1);
+  assert.equal((await request(path, { ...answer, text: peerText }, students[1].cookie)).response.status, 200);
+  await until(() => teacher.latest?.questionRound?.total === 2 &&
+    students[0].peer.latest?.questionRound?.total === 2 && students[2].peer.latest?.questionRound?.total === 2,
+  'Question answers did not broadcast to the correct viewers');
+  const sharedAnswers = [
+    { seatNumber: 1, name: '수강생 01', text: changedText },
+    { seatNumber: 2, name: '수강생 02', text: peerText }
+  ];
+  // The projected instructor screen sees only the count until answers are published.
+  assert.equal(teacher.latest.questionRound.answers, undefined);
+  assert(!JSON.stringify(teacher.latest).includes(changedText));
+  assert.equal(students[0].peer.latest.questionRound.myAnswer, changedText);
+  assert.equal(students[0].peer.latest.questionRound.answers, undefined);
+  assert.equal(students[2].peer.latest.questionRound.myAnswer, null);
+  assert.equal(students[2].peer.latest.questionRound.answers, undefined);
+  const forgedView = await request(path + '?viewerHost=true', undefined, students[2].cookie);
+  assert.equal(forgedView.data.questionRound.answers, undefined);
+  assert(!JSON.stringify(forgedView.data).includes(changedText));
+  assert.equal((await request(path, { type: 'question-publish', roundId }, students[0].cookie)).response.status, 403);
+  const closed = await request(path, { type: 'question-close', roundId }, host);
+  assert.equal(closed.response.status, 200);
+  assert.equal(closed.data.questionRound.open, false);
+  assert.equal(closed.data.questionRound.published, false);
+  assert.equal((await request(path, undefined, students[1].cookie)).data.questionRound.answers, undefined);
+  assert.equal((await request(path, answer, students[0].cookie)).response.status, 409);
+  const published = await request(path, { type: 'question-publish', roundId }, host);
+  assert.equal(published.response.status, 200);
+  assert.equal(published.data.questionRound.open, false);
+  assert.equal(published.data.questionRound.published, true);
+  await until(() => students[2].peer.latest?.questionRound?.published === true, 'Question publication did not broadcast');
+  assert.deepEqual(students[2].peer.latest.questionRound.answers, sharedAnswers);
+  await until(() => teacher.latest?.questionRound?.answers?.length === 2, 'Published answers did not reach the instructor');
+  assert.deepEqual(teacher.latest.questionRound.answers, sharedAnswers);
+  assert.deepEqual((await request(path, undefined, students[2].cookie)).data.questionRound.answers, sharedAnswers);
+  assert.equal((await request(path, undefined, main[0].cookie)).data.questionRound.answers, undefined);
+  const visitor = await request(path);
+  assert.equal(visitor.data.questionRound.published, true);
+  assert.equal(visitor.data.questionRound.answers, undefined);
+  assert(!JSON.stringify(visitor.data).includes(changedText));
+
   const pollId = teacher.latest.polls[0].id;
   const results = await Promise.all(students.map((student, i) => request(path, { type: 'vote', pollId, option: i % 3 }, student.cookie)));
   assert(results.every(result => result.response.status === 200));
@@ -105,13 +240,36 @@ try {
   const duplicate = await connect(path, students[0].cookie);
   await until(() => duplicate.latest?.online === 50, 'Duplicate tab count is wrong');
   assert.deepEqual(duplicate.latest.seats.filter(s => s.mine), [{ number: 1, name: '수강생 01', mine: true, character: 'cat' }]);
+  const avatar = {
+    hair: 'waves', hairColor: 'brown', skin: 'peach', expression: 'grin',
+    clothing: 'puffer', clothingColor: 'sage', accessory: 'headphones'
+  };
+  const customize = { type: 'avatar-customize', avatar: { ...avatar, markup: '<svg>' }, seatNumber: 2, guest: 'another-student' };
+  assert.equal((await request(path, customize)).response.status, 401);
+  assert.equal((await request(path, customize, host)).response.status, 403);
+  assert.equal((await request(path, { ...customize, avatar: { ...avatar, accessory: 'wrong' } }, students[0].cookie)).response.status, 400);
+  const savedAvatar = await request(path, customize, students[0].cookie);
+  assert.equal(savedAvatar.response.status, 200);
+  assert.deepEqual(savedAvatar.data.seats[0].avatar, avatar);
+  assert.equal(savedAvatar.data.seats[1].avatar, undefined);
+  assert.equal('avatars' in savedAvatar.data, false);
+  await until(() => teacher.latest.seats[0].avatar?.accessory === 'headphones' &&
+    students[1].peer.latest.seats[0].avatar?.accessory === 'headphones', 'Customized appearance did not broadcast');
   duplicate.ws.send('ping'); await until(() => duplicate.pong, 'Automatic hibernation ping response missing');
+  assert.equal((await request(path,{type:'greet',seatNumber:2},students[0].cookie)).response.status,200);
+  const reciprocalGreeting = await request(path,{type:'greet',seatNumber:1},students[1].cookie);
+  assert.equal(reciprocalGreeting.data.seats[0].activity.reaction.kind,'heart');
+  assert.equal(reciprocalGreeting.data.seats[1].activity.reaction.kind,'heart');
   duplicate.ws.close(1000); students[0].peer.ws.close(1000);
   await until(() => teacher.latest?.online === 49, 'Disconnected participant remained online');
   assert.equal(teacher.latest.seats.some(s => s.number === 1), false);
   const rejoined = await connect(path, students[0].cookie);
   await until(() => rejoined.latest?.seats.some(s => s.number === 1 && s.mine), 'Reconnect must restore the original daily seat');
   assert.equal(rejoined.latest.seats.find(s => s.mine).character, 'cat');
+  assert.deepEqual(rejoined.latest.seats.find(s => s.mine).avatar, avatar);
+  assert.equal((await request(path, pick, students[0].cookie)).response.status, 200);
+  await until(() => rejoined.latest.seats.find(s => s.mine)?.avatar === undefined &&
+    teacher.latest.seats[0].avatar === undefined, 'Choosing a preset must clear the custom appearance');
   rejoined.ws.close(1000);
   await until(() => teacher.latest?.online === 49, 'Reconnected tab did not close');
   await request(path, { type: 'poll-reset', id: pollId }, host);
@@ -141,7 +299,7 @@ try {
   assert.equal((await request(path, { type: 'vote', pollId, option: 0 }, students[1].cookie)).response.status, 409);
   await request(path, { type: 'vote', pollId: cleanMood.id, option: 2 }, students[1].cookie);
   await request(path, { type: 'message', text: '초기화 후에도 채팅 가능' }, students[1].cookie);
-  assert.equal((await request(path, { type: 'room-reset', target: 'break' }, host)).response.status, 200);
+  assert.equal((await request(path, { type: 'room-reset', target: 'break' }, host)).response.status, 400);
   await until(() => students[1].peer.latest?.messages.length === 1, 'Chat after reset did not broadcast');
   assert.equal(students[1].peer.latest.polls.find(p => p.id === customId).myVote, 1);
   assert.equal(students[1].peer.latest.polls.find(p => p.kind === 'mood').total, 1);
@@ -259,6 +417,6 @@ try {
   assert.equal((await request('/api/auth', { password: '0423' }, undefined, { 'cf-connecting-ip': '198.51.100.7' })).response.status, 429);
   await mkdir('.local', { recursive: true });
   await writeFile('.local/worker-verification.json', JSON.stringify({ passed: true, concurrentStudents: 50,
-    checks: ['signed instructor and guest cookies', 'CSRF rejection', 'host-only moderation', '50 WebSocket clients and concurrent votes', 'per-viewer privacy', 'duplicate tabs and disconnect counts', 'hibernation ping and eviction recovery', 'poll archive', 'distinct daily student seats and instructor messages, duplicate tabs and reconnect, host-only chat and mood resets preserve custom polls', 'stale votes rejected after reset', 'Seoul midnight scheduling', 'real alarm clears persisted data and broadcasts', 'stale-day reads expire data', 'session survives runtime restart', 'login attempt limit', 'host-only file upload and CSRF rejection', '10MiB boundary and chunked overflow rejection', 'exact binary round trip and 50 concurrent downloads', 'upload retry deduplication', 'room-scoped downloads', 'file bytes removed on deletion, chat reset and actual daily alarm', 'daily file storage quota', 'file persistence across runtime restart'] }, null, 2));
+    checks: ['signed instructor and guest cookies', 'CSRF rejection', 'host-only moderation', '50 WebSocket clients and concurrent votes', 'private question answers, edits, close, explicit publication and per-viewer real-time delivery', 'per-viewer privacy', 'duplicate tabs and disconnect counts', 'hibernation ping and eviction recovery', 'poll archive', 'distinct daily student seats and instructor messages, duplicate tabs and reconnect, host-only chat and mood resets preserve custom polls', 'stale votes rejected after reset', 'Seoul midnight scheduling', 'real alarm clears persisted data and broadcasts', 'stale-day reads expire data', 'session survives runtime restart', 'login attempt limit', 'host-only file upload and CSRF rejection', '10MiB boundary and chunked overflow rejection', 'exact binary round trip and 50 concurrent downloads', 'upload retry deduplication', 'room-scoped downloads', 'file bytes removed on deletion, chat reset and actual daily alarm', 'daily file storage quota', 'file persistence across runtime restart'] }, null, 2));
   console.log('PASS: 50 real-time clients, concurrent votes, privacy, signed auth, daily alarm, file uploads, 50 concurrent downloads, expiry, persistence and restart.');
 } finally { await mf.dispose(); }

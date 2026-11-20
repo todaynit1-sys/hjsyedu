@@ -1,5 +1,9 @@
 const randomUUID = () => crypto.randomUUID();
-import { CHARACTERS, defaultCharacter, type Day, type Poll, type PollKind, type Room, type Snapshot } from './types.ts';
+import { CHARACTERS, QUESTION_ANSWER_MAX_LENGTH, QUESTION_PROMPT_MAX_LENGTH, REACTIONS, SCOLD_KINDS, defaultCharacter, type Day, type Poll, type PollKind, type PublicQuestionRound, type Room, type Snapshot } from './types.ts';
+import { auditoriumQuizPosition } from './auditorium.ts';
+import { parseAvatarCustomization } from './avatar-customization.ts';
+
+const QUESTION_RESPONSE_LIMIT = 256;
 
 export class AppError extends Error {
   status: number;
@@ -8,18 +12,19 @@ export class AppError extends Error {
 export function today(now = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
 }
-export function newPoll(kind: PollKind, question?: string, options?: string[]): Poll {
+export function newPoll(kind: PollKind, question = '지금 컨디션 어때요?', options = ['좋아요', '보통이에요', '조금 힘들어요']): Poll {
   return {
     id: randomUUID(), kind, open: true, archived: false, votes: {},
-    question: question ?? (kind === 'mood' ? '지금 컨디션 어때요?' : '잠깐 쉬었다 갈까요?'),
-    options: options ?? (kind === 'mood' ? ['좋아요', '보통이에요', '조금 힘들어요'] : ['계속할 수 있어요', '쉬고 싶어요'])
+    question, options
   };
 }
 export function ensureDay(room: Room, date = today()): Day {
   // Only today's data is retained; yesterday's messages, votes and aliases expire together.
   for (const previous of Object.keys(room.days)) if (previous !== date) delete room.days[previous];
-  if (!room.days[date]) room.days[date] = { date, active: true, messages: [], polls: [newPoll('mood'), newPoll('break')], presence: {} };
-  return room.days[date];
+  const day = room.days[date] ??= { date, active: true, messages: [], polls: [newPoll('mood')], presence: {} };
+  // Only the retired built-in poll is removed when an existing room is opened.
+  if (day.polls.some(poll => poll.kind === 'break')) day.polls = day.polls.filter(poll => poll.kind !== 'break');
+  return day;
 }
 export function participantName(day: Day, guest: string): string {
   const participants = day.participants ??= {};
@@ -59,7 +64,26 @@ export function safeUrl(value: unknown): string | null {
     return url.href;
   } catch { throw new AppError('http:// 또는 https://로 시작하는 링크를 입력해주세요.'); }
 }
-export function snapshot(room: Room, date: string, guest: string | null, mode: 'local' | 'cloud', onlineGuests?: Set<string>): Snapshot {
+function publicQuestion(day: Day, guest: string | null, viewerHost: boolean): PublicQuestionRound | undefined {
+  const round = day.questionRound;
+  if (!round) return undefined;
+  const entries = Object.entries(round.answers);
+  const question: PublicQuestionRound = {
+    id: round.id, prompt: round.prompt, open: round.open, published: round.published,
+    total: entries.length, myAnswer: guest ? round.answers[guest] ?? null : null
+  };
+  const participant = guest !== null && Object.hasOwn(day.participants ?? {}, guest);
+  // Answers stay hidden from everyone, the projected instructor screen included, until published.
+  if (round.published && (viewerHost || participant)) {
+    question.answers = entries.flatMap(([id, answer]) => {
+      const alias = day.participants?.[id];
+      return alias ? [{ seatNumber: seatNumber(alias), name: day.nicknames?.[id] ?? alias, text: answer }] : [];
+    }).sort((a, b) => a.seatNumber - b.seatNumber);
+  }
+  return question;
+}
+
+export function snapshot(room: Room, date: string, guest: string | null, mode: 'local' | 'cloud', onlineGuests?: Set<string>, instructorPresent = false, viewerHost = false): Snapshot {
   const day = room.days[date];
   if (!day) throw new AppError('이 날짜의 강의 기록이 없습니다.', 404);
   const currentDate = today();
@@ -69,12 +93,23 @@ export function snapshot(room: Room, date: string, guest: string | null, mode: '
     const name = day.participants?.[id];
     if (!name) return [];
     const number = seatNumber(name);
-    return [{ number, name, mine: guest === id, character: day.characters?.[id] ?? defaultCharacter(number) }];
+    return [{ number, name: day.nicknames?.[id] ?? name, mine: guest === id, character: day.characters?.[id] ?? defaultCharacter(number), ...(day.positions?.[id] ? { position: day.positions[id] } : {}),
+      ...(day.avatars?.[id] ? { avatar: day.avatars[id] } : {}),
+      ...(day.wanderers?.[id] ? { wanderSince: day.wanderers[id] } : {}),
+      ...(day.activities?.[id] ? { activity: day.activities[id] } : {}),
+      ...(day.quiz?.answers[id] ? { quizChoice: day.quiz.answers[id] } : {}) }];
   }).sort((a, b) => a.number - b.number);
+  const questionRound = publicQuestion(day, guest, viewerHost);
   return {
     code: room.code, title: room.title, demo: room.demo, date, today: currentDate,
     active: day.active && date === currentDate, dates: Object.keys(room.days).sort().reverse(),
     online: present.size, seats,
+    ...(instructorPresent ? { instructor: day.instructor ?? {} } : {}),
+    ...(questionRound ? { questionRound } : {}),
+    ...(day.quiz ? { quiz: { id: day.quiz.id, question: day.quiz.question, open: day.quiz.open,
+      ...(!day.quiz.open ? { answer: day.quiz.answer } : {}),
+      counts: [Object.values(day.quiz.answers).filter(v => v === 'O').length, Object.values(day.quiz.answers).filter(v => v === 'X').length] as [number, number],
+      myAnswer: guest ? day.quiz.answers[guest] ?? null : null } } : {}),
     messages: day.messages.map(({ authorId, ...message }) => {
       const name = message.author === 'student' && authorId && day.participants?.[authorId];
       return { ...message, mine: Boolean(guest && authorId === guest), ...(name ? { seatNumber: seatNumber(name) } : {}) };
@@ -86,13 +121,164 @@ export function mutate(room: Room, action: Record<string, unknown>, guest: strin
   const date = today();
   if (action.date !== undefined && action.date !== date) throw new AppError('지난 강의 기록은 변경할 수 없습니다.', 409);
   const day = ensureDay(room, date);
-  if (action.type === 'character') {
+  if (action.type === 'question-answer') {
+    if (host) throw new AppError('수강생으로 참여해주세요.', 403);
+    if (!guest) throw new AppError('먼저 강의실에 참여해주세요.', 401);
+    const round = day.questionRound;
+    if (!day.active || !day.participants?.[guest] || !round?.open || round.id !== action.roundId) {
+      throw new AppError('현재 진행 중인 질문을 확인해주세요.', 409);
+    }
+    const answer = text(action.text, '답변', QUESTION_ANSWER_MAX_LENGTH);
+    if (!Object.hasOwn(round.answers, guest) && Object.keys(round.answers).length >= QUESTION_RESPONSE_LIMIT) {
+      throw new AppError('이 질문의 응답이 모두 찼어요.', 409);
+    }
+    round.answers[guest] = answer;
+    return;
+  }
+  if (['question-start', 'question-close', 'question-publish', 'question-clear'].includes(String(action.type))) {
+    if (!host) throw new AppError('강사 로그인이 필요합니다.', 403);
+    if (!day.active) throw new AppError('강의가 종료됐어요.', 409);
+    const round = day.questionRound;
+    if (action.type === 'question-clear') {
+      // Takes the question off the chalkboard; its answers are discarded with it.
+      if (!round || round.id !== action.roundId) throw new AppError('현재 질문을 확인해주세요.', 409);
+      if (round.open) throw new AppError('질문을 마감한 뒤 칠판에서 내려주세요.', 409);
+      delete day.questionRound;
+    } else if (action.type === 'question-start') {
+      if (round?.open) throw new AppError('진행 중인 질문을 먼저 마감해주세요.', 409);
+      const prompt = text(action.prompt, '질문', QUESTION_PROMPT_MAX_LENGTH);
+      day.questionRound = { id: randomUUID(), prompt, open: true, published: false, answers: {} };
+    } else {
+      if (!round || round.id !== action.roundId) throw new AppError('현재 질문을 확인해주세요.', 409);
+      round.open = false;
+      if (action.type === 'question-publish') round.published = true;
+    }
+    return;
+  }
+  if (['hand', 'reaction', 'greet', 'quiz-answer'].includes(String(action.type))) {
+    if (host) throw new AppError('수강생으로 참여해주세요.', 403);
+    if (!guest) throw new AppError('먼저 강의실에 참여해주세요.', 401);
+    if (!day.active || !day.participants?.[guest]) throw new AppError('진행 중인 강의실에서 참여해주세요.', 409);
+    const activities = day.activities ??= {};
+    const own = activities[guest] ??= {};
+    const now = Date.now();
+    if (action.type === 'hand') {
+      if (typeof action.raised !== 'boolean') throw new AppError('손들기 상태를 확인해주세요.');
+      if (action.raised) own.handAt ??= now;
+      else delete own.handAt;
+    } else if (action.type === 'reaction') {
+      const kind = REACTIONS.find(value => value === action.kind);
+      if (!kind) throw new AppError('리액션을 골라주세요.');
+      if (own.reaction && now - own.reaction.at < 1000) throw new AppError('잠깐만요. 리액션은 1초에 한 번 보낼 수 있어요.', 429);
+      own.reaction = { kind, at: now };
+    } else if (action.type === 'greet') {
+      const target = Object.entries(day.participants).find(([id, name]) => id !== guest && seatNumber(name) === action.seatNumber);
+      if (!target) throw new AppError('인사할 친구를 골라주세요.');
+      const previous = day.greetings?.[guest];
+      if (previous && now - previous.at < 1000) throw new AppError('인사는 잠깐 간격을 두고 보내주세요.', 429);
+      const number = seatNumber(day.participants[guest]);
+      const reply = day.greetings?.[target[0]];
+      const mutual = reply?.to === number && now - reply.at < 30_000;
+      (day.greetings ??= {})[guest] = { to: action.seatNumber as number, at: now };
+      own.reaction = { kind: mutual ? 'heart' : 'wave', at: now };
+      const friend = activities[target[0]] ??= {};
+      friend.greeting = { from: number, at: now };
+      if (mutual) friend.reaction = { kind: 'heart', at: now };
+    } else {
+      if (!day.quiz?.open || action.quizId !== day.quiz.id) throw new AppError('이 OX 퀴즈는 마감됐어요.', 409);
+      if (action.choice !== 'O' && action.choice !== 'X') throw new AppError('O 또는 X를 골라주세요.');
+      day.quiz.answers[guest] = action.choice;
+      (day.positions ??= {})[guest] = auditoriumQuizPosition(seatNumber(day.participants[guest]), action.choice);
+    }
+    return;
+  }
+  if (action.type === 'scold') {
+    if (!host) throw new AppError('강사 로그인이 필요합니다.', 403);
+    if (!day.active) throw new AppError('강의가 종료됐어요.', 409);
+    const target = Object.entries(day.participants ?? {}).find(([, name]) => seatNumber(name) === action.seatNumber);
+    if (!target) throw new AppError('그 자리에 앉은 수강생이 없어요.', 404);
+    if (action.kind === 'forgive') { delete day.activities?.[target[0]]?.scold; return; }
+    const kind = SCOLD_KINDS.find(value => value === action.kind);
+    if (!kind) throw new AppError('혼내는 방법을 골라주세요.');
+    // Only the latest scolding per student is kept, so repeated taps never grow storage.
+    ((day.activities ??= {})[target[0]] ??= {}).scold = { kind, at: Date.now() };
+    return;
+  }
+  if (['quiz-start', 'quiz-reveal', 'quiz-clear', 'hand-lower'].includes(String(action.type))) {
+    if (!host) throw new AppError('강사 로그인이 필요합니다.', 403);
+    if (!day.active) throw new AppError('강의가 종료됐어요.', 409);
+    if (action.type === 'quiz-start') {
+      const question = text(action.question, 'OX 문제', 160);
+      if (action.answer !== 'O' && action.answer !== 'X') throw new AppError('정답을 골라주세요.');
+      day.quiz = { id: randomUUID(), question, answer: action.answer, open: true, answers: {} };
+      delete day.wanderers;
+      if (day.instructor) delete day.instructor.wanderSince;
+    } else if (action.type === 'quiz-clear') {
+      if (!day.quiz || action.quizId !== day.quiz.id) throw new AppError('현재 퀴즈를 확인해주세요.', 409);
+      delete day.quiz;
+    } else if (action.type === 'quiz-reveal') {
+      if (!day.quiz || action.quizId !== day.quiz.id) throw new AppError('현재 퀴즈를 확인해주세요.', 409);
+      day.quiz.open = false;
+    } else {
+      const target = Object.entries(day.participants ?? {}).find(([, name]) => seatNumber(name) === action.seatNumber);
+      if (target && day.activities?.[target[0]]) delete day.activities[target[0]].handAt;
+    }
+    return;
+  }
+  if (action.type === 'move' || action.type === 'instructor-move') {
+    if (action.type === 'instructor-move' && !host) throw new AppError('강사 로그인이 필요합니다.', 403);
+    if (action.type === 'move' && host) throw new AppError('수강생으로 참여해주세요.', 403);
+    if (!host && !guest) throw new AppError('먼저 강의실에 참여해주세요.', 401);
+    if (!day.active || (!host && !day.participants?.[guest!])) throw new AppError('진행 중인 강의실에서 움직일 수 있어요.', 409);
+    const legacyQuiz = action.ignoreLegacyQuiz === true ? undefined : day.quiz;
+    if (action.wander === true) {
+      if (legacyQuiz?.open) throw new AppError('OX 퀴즈가 끝나면 자율 이동을 켤 수 있어요.', 409);
+      if (host) {
+        day.instructor = { wanderSince: day.instructor?.wanderSince ?? Date.now() };
+      } else {
+        delete day.positions?.[guest!];
+        (day.wanderers ??= {})[guest!] ??= Date.now();
+      }
+      return;
+    }
+    const position = action.position === null ? null : movePosition(action.position);
+    if (host) {
+      if (position) day.instructor = { position };
+      else delete day.instructor;
+    } else {
+      delete day.wanderers?.[guest!];
+      if (position) (day.positions ??= {})[guest!] = position;
+      else delete day.positions?.[guest!];
+      if (legacyQuiz?.open) {
+        if (position) legacyQuiz.answers[guest!] = position.x < .5 ? 'O' : 'X';
+        else delete legacyQuiz.answers[guest!];
+      }
+    }
+    return;
+  }
+  if (action.type === 'nickname') {
+    if (host) throw new AppError('수강생만 닉네임을 설정할 수 있어요.', 403);
+    if (!guest) throw new AppError('먼저 강의실에 참여해주세요.', 401);
+    if (!day.active || !day.participants?.[guest]) throw new AppError('강의실에 입장한 뒤 닉네임을 설정해주세요.', 409);
+    const nickname = text(action.nickname, '닉네임', 20);
+    if (/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/.test(nickname)) throw new AppError('닉네임에 줄바꿈이나 숨김 문자를 사용할 수 없어요.');
+    (day.nicknames ??= {})[guest] = nickname;
+    return;
+  }
+  if (action.type === 'character' || action.type === 'avatar-customize') {
     if (host) throw new AppError('수강생만 캐릭터를 고를 수 있어요.', 403);
     if (!guest) throw new AppError('먼저 강의실에 참여해주세요.', 401);
     if (!day.active || !day.participants?.[guest]) throw new AppError('강의실에 입장한 뒤 캐릭터를 골라주세요.', 409);
+    if (action.type === 'avatar-customize') {
+      const avatar = parseAvatarCustomization(action.avatar);
+      if (!avatar) throw new AppError('캐릭터의 꾸미기 항목을 다시 골라주세요.');
+      (day.avatars ??= {})[guest] = avatar;
+      return;
+    }
     const character = CHARACTERS.find(choice => choice === action.character);
     if (!character) throw new AppError('목록에서 캐릭터를 골라주세요.');
     (day.characters ??= {})[guest] = character;
+    delete day.avatars?.[guest];
     return;
   }
   if (action.type === 'heartbeat') {
@@ -115,14 +301,14 @@ export function mutate(room: Room, action: Record<string, unknown>, guest: strin
     if (day.messages.length >= 2000) throw new AppError('하루에 최대 2,000개까지 메시지를 보낼 수 있습니다.');
     if (!host && day.messages.filter(m => m.authorId === guest && Date.now() - Date.parse(m.createdAt) < 60_000).length >= 10) throw new AppError('메시지를 너무 빠르게 보내고 있어요. 잠시 후 다시 보내주세요.', 429);
     const content = text(action.text, '내용', 2000); const url = safeUrl(action.url);
-    day.messages.push({ id: randomUUID(), text: content, url, pinned: false, createdAt: new Date().toISOString(), author: host ? 'host' : 'student', authorName: host ? '강사' : participantName(day, guest!), ...(host ? {} : { authorId: guest! }) });
+    day.messages.push({ id: randomUUID(), text: content, url, pinned: false, createdAt: new Date().toISOString(), author: host ? 'host' : 'student', authorName: host ? '강사' : day.nicknames?.[guest!] ?? participantName(day, guest!), ...(host ? {} : { authorId: guest! }) });
     return;
   }
   if (!host) throw new AppError('강사 로그인이 필요합니다.', 401);
   switch (action.type) {
     case 'room-reset': {
       if (action.target === 'chat') { day.messages = []; break; }
-      if (action.target !== 'mood' && action.target !== 'break') throw new AppError('초기화할 항목을 확인해주세요.');
+      if (action.target !== 'mood') throw new AppError('초기화할 항목을 확인해주세요.');
       const kind = action.target;
       const current = day.polls.find(p => p.kind === kind && !p.archived);
       const replacement = newPoll(kind, current?.question, current ? [...current.options] : undefined);
@@ -146,6 +332,11 @@ export function mutate(room: Room, action: Record<string, unknown>, guest: strin
     case 'active':
       if (typeof action.active !== 'boolean') throw new AppError('강의 상태를 확인해주세요.');
       day.active = action.active;
+      if (!day.active) {
+        delete day.instructor;
+        delete day.wanderers;
+        if (day.questionRound) day.questionRound.open = false;
+      }
       break;
     case 'poll-toggle': {
       const poll = day.polls.find(p => p.id === action.id && !p.archived);
@@ -173,4 +364,14 @@ export function mutate(room: Room, action: Record<string, unknown>, guest: strin
     }
     default: throw new AppError('지원하지 않는 요청입니다.');
   }
+}
+
+function movePosition(value: unknown) {
+  const position = value as { x?: unknown; y?: unknown } | undefined;
+  if (!position || typeof position.x !== 'number' || typeof position.y !== 'number'
+    || !Number.isFinite(position.x) || !Number.isFinite(position.y)
+    || position.x < .06 || position.x > .94 || position.y < .08 || position.y > .92) {
+    throw new AppError('교실 안에서 이동할 위치를 골라주세요.');
+  }
+  return { x: Math.round(position.x * 10000) / 10000, y: Math.round(position.y * 10000) / 10000 };
 }
